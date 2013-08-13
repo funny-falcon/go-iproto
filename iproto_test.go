@@ -1,16 +1,17 @@
-package iproto
+package iproto_test
 
 import (
-	"testing"
 	"bytes"
+	. "iproto"
+	"testing"
 )
 
 func TestConnect(t *testing.T) {
 	var (
-		rid int32
+		rid      int32
 		response *Response
-		err error
-		conn *IProto
+		err      error
+		conn     *IProto
 	)
 
 	conn, err = Connect("localhost:33013")
