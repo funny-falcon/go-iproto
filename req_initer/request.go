@@ -47,18 +47,3 @@ func (r *Request) setIndex(ind int, kind heapKind) {
 	}
 }
 
-func (r *Request) sendTimeouted(holder *ReqIniter) {
-	res := iproto.Response{Msg: r.Msg, Id: r.Id, Code: iproto.RcSendTimeout}
-	//log.Printf("SEND TIMEOUT %+v", r)
-	if r.origin != nil {
-		r.origin.Response(res)
-		r.origin = nil
-	}
-}
-
-func (r *Request) recvTimeouted(holder *ReqIniter) {
-	res := iproto.Response{Msg: r.Msg, Id: r.Id, Code: iproto.RcRecvTimeout}
-	//log.Printf("RECV TIMEOUT %+v", r)
-	r.origin.Response(res)
-	r.origin = nil
-}

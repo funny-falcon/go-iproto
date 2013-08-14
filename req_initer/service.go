@@ -20,7 +20,7 @@ type ReqIniter struct {
 	timeout  iproto.Timeout
 	incoming chan *iproto.Request
 	outgoing chan *iproto.Request
-	responses chan iproto.Response
+	responses chan uint32
 
 	state util.Synced
 	exit  chan bool
@@ -78,8 +78,8 @@ func (r *ReqIniter) Init(timeout iproto.Timeout) (err error) {
 		return AlreadyInited
 	}
 	r.timeout = timeout.SetDefaults()
-	r.outgoing = make(chan *iproto.Request, 10240)
-	r.responses = make(chan iproto.Response, 10240)
+	r.outgoing = make(chan *iproto.Request, 1024)
+	r.responses = make(chan uint32, 1024)
 	r.endPoints = make(map[string]iproto.EndPoint)
 	r.exit = make(chan bool)
 	r.reqHolder.DefInit()
@@ -146,8 +146,8 @@ Loop:
 				} else {
 					break Loop
 				}
-			case response := <-r.responses:
-				r.response(response)
+			case responseId := <-r.responses:
+				r.remove(responseId)
 			}
 		} else {
 			select {
@@ -161,8 +161,8 @@ Loop:
 				} else {
 					break Loop
 				}
-			case response := <-r.responses:
-				r.response(response)
+			case responseId := <-r.responses:
+				r.remove(responseId)
 			}
 		}
 	}
@@ -188,15 +188,15 @@ Loop:
 				r.cleanExpired(timer)
 			case r.outgoing <- &cur.Request:
 				r.queue.RemoveSend(cur)
-			case response := <-r.responses:
-				r.response(response)
+			case responseId := <-r.responses:
+				r.remove(responseId)
 			}
 		} else {
 			select {
 			case <-timer.C:
 				r.cleanExpired(timer)
-			case response := <-r.responses:
-				r.response(response)
+			case responseId := <-r.responses:
+				r.remove(responseId)
 			}
 		}
 	}
@@ -209,37 +209,52 @@ func (r *ReqIniter) cleanExpired(timer *time.Timer) {
 		if req = r.queue.ExpiredSend(now); req == nil {
 			break
 		}
-		req.sendTimeouted(r)
-		r.remove(req)
+		r.remove(req.Id)
+		res := iproto.Response{Msg: req.Msg, Id: req.Id, Code: iproto.RcSendTimeout}
+		if req.origin != nil {
+			req.origin.Response(res)
+			req.origin = nil
+		}
 	}
 	for {
 		if req = r.queue.ExpiredRecv(now); req == nil {
 			break
 		}
 		r.queue.RemoveRecv(req)
-		req.recvTimeouted(r)
+		if req.origin != nil {
+			res := iproto.Response{Msg: req.Msg, Id: req.Id, Code: iproto.RcRecvTimeout}
+			req.origin.Response(res)
+			req.origin = nil
+		}
 	}
 	timer.Reset(r.queue.Remains(now))
 }
 
-func (r *ReqIniter) remove(req *Request) {
-	r.queue.RemoveSend(req)
-	r.queue.RemoveRecv(req)
-	r.reqHolder.Remove(req.Id)
-}
-
-func (r *ReqIniter) Response(res iproto.Response) {
-	r.responses <- res
-}
-
-func (r *ReqIniter) response(res iproto.Response) {
-	void := r.reqHolder.Remove(res.Id)
+func (r *ReqIniter) remove(id uint32) {
+	r.state.Lock()
+	void := r.reqHolder.Remove(id)
+	r.state.Unlock()
 	if void == nil {
 		return
 	}
 	req := void.(*Request)
 	r.queue.RemoveSend(req)
 	r.queue.RemoveRecv(req)
+}
+
+func (r *ReqIniter) Response(res iproto.Response) {
+	r.response(res)
+	r.responses <- res.Id
+}
+
+func (r *ReqIniter) response(res iproto.Response) {
+	r.state.Lock()
+	void := r.reqHolder.Get(res.Id)
+	r.state.Unlock()
+	if void == nil {
+		return
+	}
+	req := void.(*Request)
 	if req.origin != nil {
 		res.Id = req.origin.Id
 		req.origin.Response(res)

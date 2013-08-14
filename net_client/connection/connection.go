@@ -28,9 +28,7 @@ type Control struct {
 type notifyAction uint32
 
 const (
-	addInFly = notifyAction(iota + 1)
-	decInFly
-	writeClosed
+	writeClosed = notifyAction(iota + 1)
 	readClosed
 )
 
@@ -48,6 +46,16 @@ type Error struct {
 	Error error
 }
 
+type ConnState uint32
+const (
+	CsNew = 1 << iota
+	CsDialing
+	CsConnected
+	CsReadClosed
+	CsWriteClosed
+	CsClosed = CsReadClosed | CsWriteClosed
+)
+
 type CConf struct {
 	Network string
 	Address string
@@ -55,6 +63,10 @@ type CConf struct {
 	PingInterval time.Duration
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+	DialTimeout  time.Duration
+
+	SendTimeout  time.Duration
+	RecvTimeout  time.Duration
 
 	RetCodeLen int
 
@@ -63,7 +75,9 @@ type CConf struct {
 
 type Connection struct {
 	Id uint32
+	sync.Mutex
 	*CConf
+
 	conn NetConn
 
 	Control      chan Control
@@ -72,12 +86,12 @@ type Connection struct {
 	orphaned     bool
 
 	requests chan *iproto.Request
-	inFly    map[uint32]*iproto.Request
-	sync.Mutex
+	inFly    map[uint32]*Request
+	currentId  uint32
 
-	Dialing    bool
-	closing    bool
-	readClosed bool
+	sendHeap, recvHeap heap
+
+	State        ConnState
 
 	readTimeout  nt.Timeout
 	writeTimeout nt.Timeout
@@ -94,23 +108,21 @@ func NewConnection(conf *CConf, id uint32) (conn *Connection) {
 		writeControl: make(chan Control, 2),
 		orphaned:     false,
 
-		inFly:        make(map[uint32]*iproto.Request),
+		inFly:        make(map[uint32]*Request),
+		currentId:    1,
+
+		sendHeap:     heap{ heap: make([]*Request, 0, 128), kind: _send },
+		recvHeap:     heap{ heap: make([]*Request, 0, 128), kind: _recv },
+
 		readTimeout:  nt.Timeout{Timeout: conf.ReadTimeout},
 		writeTimeout: nt.Timeout{Timeout: conf.WriteTimeout},
 
 		loopNotify: make(chan notifyAction, 2),
-
-		Dialing:    true,
 	}
 	conn.readTimeout.Init()
 	conn.writeTimeout.Init()
 	return
 }
-
-func (conn *Connection) Established() bool {
-	return !conn.Dialing && !(conn.closing || conn.readClosed)
-}
-
 
 /* default 5 seconds interval for Connection */
 const DialTimeout = 5 * time.Second
@@ -128,12 +140,11 @@ func (conn *Connection) dial() {
 	dialer := net.Dialer{Timeout: DialTimeout}
 	if netconn, err := dialer.Dial(conn.Network, conn.Address); err != nil {
 		conn.ConnErr <- Error{conn, Dial, err}
-		conn.Dialing = false
-		conn.closing = true
-		conn.readClosed = true
+		conn.State = CsClosed
 	} else {
 		conn.conn = netconn.(NetConn)
 		conn.ConnErr <- Error{conn, Dial, nil}
+		conn.State = CsConnected
 		go conn.readLoop()
 		go conn.writeLoop()
 		go conn.controlLoop()
@@ -141,32 +152,36 @@ func (conn *Connection) dial() {
 }
 
 /* RunWithConn is for testing purposes */
-func (conn *Connection) RunWithConn(requests chan *iproto.Request, netconn NetConn) {
+func (conn *Connection) RunWithConn(requests chan *iproto.Request, netconn io.ReadWriteCloser) {
+	switch nc := netconn.(type) {
+	case NetConn:
+		conn.conn = nc
+	default:
+		conn.conn = rwcWrapper{ReadWriteCloser: netconn}
+	}
 	conn.requests = requests
-	conn.conn = netconn
 	conn.ConnErr <- Error{conn, Dial, nil}
 	go conn.readLoop()
 	go conn.writeLoop()
 	conn.controlLoop()
 }
 
-/* RunWithReadWriteCloser is for testing purposes */
-func (conn *Connection) RunWithReadWriteCloser(requests chan *iproto.Request, netconn io.ReadWriteCloser) {
-	conn.requests = requests
-	conn.conn = rwcWrapper{ReadWriteCloser: netconn}
-	conn.ConnErr <- Error{conn, Dial, nil}
-	go conn.readLoop()
-	go conn.writeLoop()
-	conn.controlLoop()
-}
-
-func (conn *Connection) putInFly(req *iproto.Request) {
+func (conn *Connection) putInFly(request *iproto.Request) {
 	conn.Lock()
 	defer conn.Unlock()
-	if ex, ok := conn.inFly[req.Id]; ok {
-		log.Panicf("Duplicate requests %+v %+v", ex, req)
+	id := conn.currentId
+	_, ok := conn.inFly[id]
+	for ok {
+		id++
+		if id == iproto.PingRequestId {
+			id = 1
+		}
+		_, ok = conn.inFly[id]
 	}
-	conn.inFly[req.Id] = req
+	req := &Request{ Request: request }
+	conn.sendHeap.Add(req)
+	conn.recvHeap.Add(req)
+	conn.inFly[id] = req
 }
 
 func (conn *Connection) respondInFly(res iproto.Response) {
@@ -177,18 +192,26 @@ func (conn *Connection) respondInFly(res iproto.Response) {
 	if req == nil {
 		log.Panicf("No mathing request: %v %v", res.Msg, res.Id)
 	}
-	req.Response(res)
+	conn.sendHeap.Remove(req)
+	conn.recvHeap.Remove(req)
+	if req.Request != nil {
+		req.Response(res)
+	}
 }
 
 func (conn *Connection) flushInFly() {
-	var req *iproto.Request
+	var req *Request
 	conn.Lock()
 	defer conn.Unlock()
+	conn.sendHeap.heap = nil
+	conn.recvHeap.heap = nil
+
 	resp := iproto.Response{Code: iproto.RcIOError}
 	for resp.Id, req = range conn.inFly {
 		resp.Msg = req.Msg
 		req.Response(resp)
 	}
+	conn.inFly = nil
 }
 
 func (conn *Connection) checkControl() {
@@ -205,13 +228,15 @@ func (conn *Connection) checkControl() {
 		} else {
 			switch control.Kind {
 			case ReadTimeout:
-				if !conn.readClosed {
+				if conn.State & CsReadClosed == 0 {
 					conn.readTimeout.Timeout = control.Duration
 					conn.readTimeout.DoAction(conn.conn, nt.Read, nt.Reset)
 				}
 			case WriteTimeout:
-				conn.writeTimeout.Timeout = control.Duration
-				conn.writeTimeout.DoAction(conn.conn, nt.Write, nt.Reset)
+				if conn.State & CsWriteClosed == 0 {
+					conn.writeTimeout.Timeout = control.Duration
+					conn.writeTimeout.DoAction(conn.conn, nt.Write, nt.Reset)
+				}
 			case CloseWrite, PingInterval:
 				conn.writeControl <- control
 			default:
@@ -223,13 +248,11 @@ func (conn *Connection) checkControl() {
 }
 
 func (conn *Connection) controlLoopExit() {
-	if !conn.closing {
+	if conn.State & CsWriteClosed == 0 {
 		conn.writeControl <- Control{Kind: CloseWrite}
 	}
 	conn.ConnErr <- Error{conn, Read, conn.readErr}
-	for len(conn.inFly) != 0 {
-		conn.flushInFly()
-	}
+	conn.flushInFly()
 }
 
 func (conn *Connection) controlLoop() {
@@ -245,20 +268,20 @@ func (conn *Connection) controlLoop() {
 		case action := <-conn.loopNotify:
 			switch action {
 			case writeClosed:
-				conn.closing = true
+				conn.State |= CsWriteClosed
 			case readClosed:
-				conn.readClosed = true
-				if !conn.closing {
+				conn.State |= CsReadClosed
+				if conn.State & CsWriteClosed == 0 {
 					conn.writeControl <- Control{Kind: CloseWrite}
 				}
 			}
 		}
-		if conn.closing {
+		if conn.State & CsWriteClosed == 0 {
 			if !closeReadCalled && len(conn.inFly) == 0 {
 				conn.conn.CloseRead()
 				closeReadCalled = true
 			}
-			if conn.readClosed {
+			if conn.State & CsReadClosed == 0 {
 				break
 			}
 		}
@@ -278,6 +301,8 @@ func (conn *Connection) readLoop() {
 
 	read := bufio.NewReaderSize(conn.conn, 64*1024)
 	conn.readTimeout.PingAction(nt.UnFreeze)
+
+	timer := time.NewTimer(time.Hour)
 
 	for {
 		conn.readTimeout.PingAction(nt.Reset)
