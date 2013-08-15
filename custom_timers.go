@@ -167,12 +167,14 @@ type heapItem struct {
 }
 type CHeap struct {
 	sync.Mutex
-	heap []heapItem
+	heap [][]heapItem
+	size int32
 	changed chan bool
 }
 
 func (h *CHeap) Init() {
-	h.heap = make([]heapItem, 0, 128)
+	h.heap = make([][]heapItem, 1)
+	h.heap[0] = make([]heapItem, 256)
 	h.changed = make(chan bool, 1)
 	go h.Loop()
 }
@@ -222,8 +224,8 @@ func (h *CHeap) checkExpired() Epoch {
 	now := NowEpoch()
 	h.Lock()
 	defer h.Unlock()
-	for len(h.heap) > 0 {
-		t := h.heap[0]
+	for h.size > 0 {
+		t := h.heap[0][0]
 		if t.Sub(now) >= 0 {
 			break
 		}
@@ -232,87 +234,108 @@ func (h *CHeap) checkExpired() Epoch {
 		t.expire()
 		h.Lock()
 	}
-	if len(h.heap) > 0 {
-		return h.heap[0].Epoch
+	if h.size > 0 {
+		return h.heap[0][0].Epoch
 	}
 	return now.Add(time.Hour)
 }
 
 func (h *CHeap) insert(tm timeout) {
-	h.heap = append(h.heap, heapItem{timeout: tm, Epoch: tm.epoch()})
-	i := int32(len(h.heap)-1)
-	h.heap[i].setIndex(i)
+	if h.size & 0xff == 0 {
+		h.heap = append(h.heap, make([]heapItem, 256))
+	}
+	h.heap[h.size>>8][h.size&0xff] = heapItem{timeout: tm, Epoch: tm.epoch()}
+	i := h.size
+	tm.setIndex(i)
+	h.size++
 	h.up(i)
+}
+
+func (h *CHeap) get(i int32) heapItem {
+	return h.heap[i>>8][i&0xff]
+}
+
+func (h *CHeap) getEpoch(i int32) Epoch {
+	return h.heap[i>>8][i&0xff].Epoch
+}
+
+func (h *CHeap) set(i int32, item heapItem) {
+	h.heap[i>>8][i&0xff] = item
+	item.setIndex(i)
+}
+
+func (h *CHeap) move(from, to int32) {
+	item := h.heap[from>>8][from&0xff]
+	h.heap[to>>8][to&0xff] = item
+	item.setIndex(to)
 }
 
 func (h *CHeap) remove(tm timeout) {
 	i := tm.index()
 	tm.setIndex(-1)
-	l := int32(len(h.heap) - 1)
+	l := h.size - 1
 	if i != l {
-		h.heap[i] = h.heap[l]
-		h.heap[i].setIndex(i)
-		h.heap = h.heap[:l]
+		h.move(l, i)
+		h.size--
 		h.down(i)
 		h.up(i)
 	} else {
-		h.heap = h.heap[:l]
+		h.size--
 	}
-	if len(h.heap) < cap(h.heap) >> 4 {
-		heap := make([]heapItem, len(h.heap), len(h.heap)*2)
-		copy(heap, h.heap)
-		h.heap = heap
+	if h.size>>8 > 0 && h.size>>8 < int32(len(h.heap)) {
+		h.heap[len(h.heap)] = nil
+		h.heap = h.heap[:len(h.heap)-1]
+	} else {
+		h.set(h.size, heapItem{})
 	}
 }
 
 func (h *CHeap) pop() {
-	l := int32(len(h.heap) - 1)
-	h.heap[0].setIndex(-1)
+	l := h.size - 1
+	h.heap[0][0].setIndex(-1)
 	if l > 0 {
-		h.heap[0] = h.heap[l]
-		h.heap = h.heap[:l]
+		h.move(l, 0)
+		h.size--
 		h.down(0)
 	} else {
-		h.heap = h.heap[:l]
+		h.size--
 	}
-	if len(h.heap) < cap(h.heap) >> 4 {
-		heap := make([]heapItem, len(h.heap), len(h.heap)*2)
-		copy(heap, h.heap)
-		h.heap = heap
+	if h.size>>8 > 0 && h.size>>8 < int32(len(h.heap)) {
+		h.heap[len(h.heap)] = nil
+		h.heap = h.heap[:len(h.heap)-1]
+	} else {
+		h.set(h.size, heapItem{})
 	}
 }
 
 func (h *CHeap) up(j int32) {
-	item := h.heap[j]
+	item := h.get(j)
 	i := (j - 1) / 4
-	if i == j || h.heap[i].Epoch < item.Epoch {
+	if i == j || h.getEpoch(i) < item.Epoch {
 		return
 	}
-	h.heap[j] = h.heap[i]
-	h.heap[j].setIndex(i)
+	h.move(i, j)
 	j = i
 
 	for {
 		i = (j - 1) / 4
-		if i == j || h.heap[i].Epoch < item.Epoch {
+		if i == j || h.getEpoch(i) < item.Epoch {
 			break
 		}
-		h.heap[j] = h.heap[i]
-		h.heap[j].setIndex(j)
+		h.move(i, j)
 		j = i
 	}
-	h.heap[j] = item
+	h.set(j, item)
 	item.setIndex(j)
 }
 
 func (h *CHeap) down(j int32) {
 	var i int32
-	item := h.heap[j]
+	item := h.get(j)
 	if i = h.downIndex(j, item.Epoch); i == j {
 		return
 	}
-	h.heap[j] = h.heap[i]
-	h.heap[j].setIndex(j)
+	h.move(i, j)
 	j = i
 
 	for {
@@ -320,43 +343,45 @@ func (h *CHeap) down(j int32) {
 		if i == j {
 			break
 		}
-		h.heap[j] = h.heap[i]
-		h.heap[j].setIndex(j)
+		h.move(i, j)
 		j = i
 	}
-	h.heap[j] = item
+	h.set(j, item)
 	item.setIndex(j)
 }
 
 func (h *CHeap) downIndex(j int32, e Epoch) int32 {
-	last := int32(len(h.heap) - 1)
+	last := h.size - 1
 	if j > (last-1) / 4 {
 		return j
 	}
-	var j1 int32
-	var e1 Epoch
+	var j2 int32
+	var e1, e2 Epoch
 	i1 := j * 4 + 1
 	i2 := i1+1
-	if h.heap[i1].Epoch < e {
+	
+	e1 = h.getEpoch(i1)
+	if e1 < e {
 		j = i1
-		e = h.heap[i1].Epoch
+		e = e1
 	}
 	if i2 <= last {
 		if i2+1 <= last {
-			if h.heap[i2].Epoch < h.heap[i2+1].Epoch {
-				j1 = i2
-				e1 = h.heap[i2].Epoch
+			e21, e22 := h.getEpoch(i2), h.getEpoch(i2+1)
+			if e21 < e22 {
+				j2 = i2
+				e2 = e21
 			} else {
-				j1 = i2+1
-				e1 = h.heap[i2+1].Epoch
+				j2 = i2+1
+				e2 = e22
 			}
 		} else {
-			j1 = i2
-			e1 = h.heap[i2].Epoch
+			j2 = i2
+			e2 = h.getEpoch(i2)
 		}
-		if e1 < e {
-			j = j1
-			e = e1
+		if e2 < e {
+			j = j2
+			e = e2
 		}
 	}
 	return j
