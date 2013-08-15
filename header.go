@@ -8,9 +8,15 @@ var bin_le = binary.LittleEndian
 
 type Header struct {
 	buf                     [16]byte
+	bodybuf                 []byte
 }
 
+const (
+	bodybufSize = 1*1024
+)
+
 func (h *Header) Init() {
+	h.bodybuf = make([]byte, bodybufSize)
 }
 
 func (h *Header) ReadRequest(r io.Reader) (req RequestHeader, err error) {
@@ -75,9 +81,20 @@ func (h *Header) ReadResponse(r io.Reader, retCodeLen int) (res Response, err er
 		}
 	}
 
+	var body []byte
+	if body_len < 128 {
+		if body_len > uint32(len(h.bodybuf)) {
+			h.bodybuf = make([]byte, bodybufSize)
+		}
+		body = h.bodybuf[:body_len]
+		h.bodybuf = h.bodybuf[body_len:]
+	} else {
+		body = make([]byte, body_len)
+	}
+
 	res = Response{
 		Msg:  msg,
-		Body: make([]byte, body_len),
+		Body: body,
 		Code: code,
 		Id:   bin_le.Uint32(h.buf[8:12]),
 	}
