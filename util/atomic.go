@@ -23,6 +23,10 @@ func (r *Atomic) Get() Atomic {
 	return Atomic(atomic.LoadUint32((*uint32)(r)))
 }
 
+func (r *Atomic) Incr() Atomic {
+	return Atomic(atomic.AddUint32((*uint32)(r), 1))
+}
+
 type Synced struct {
 	sync.Mutex
 	State uint32

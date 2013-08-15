@@ -51,7 +51,7 @@ func (r *Request) Send(serv EndPoint) bool {
 		r.WorkTime = serv.TypicalWorkTime(r.Msg)
 	}
 
-	wrapInDeadline(r)
+	wrapInCDeadline(r)
 
 	select {
 	case serv.RequestChan() <- r:
