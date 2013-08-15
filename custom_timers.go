@@ -13,8 +13,7 @@ var _ = log.Print
 type CDeadline struct {
 	basic BasicResponder
 	state util.Atomic
-	heap *CHeap
-	send, recv int32
+	heap, send, recv int32
 }
 
 var heaps = make([]CHeap, runtime.GOMAXPROCS(-1))
@@ -50,9 +49,9 @@ func (d *CDeadline) Wrap(r *Request) {
 		return
 	}
 
-	d.heap = &heaps[int(heapsI.Incr()) % len(heaps)]
-	d.heap.Insert(sendTimeout{d})
-	d.heap.Insert(recvTimeout{d})
+	d.heap = int32(int(heapsI.Incr()) % len(heaps))
+	heaps[d.heap].Insert(sendTimeout{d})
+	heaps[d.heap].Insert(recvTimeout{d})
 }
 
 func (d *CDeadline) sendExpired() {
@@ -81,8 +80,8 @@ func (d *CDeadline) recvExpired() {
 
 func (d *CDeadline) Respond(res Response) {
 	d.state.Store(dsResponding)
-	d.heap.Remove(sendTimeout{d})
-	d.heap.Remove(recvTimeout{d})
+	heaps[d.heap].Remove(sendTimeout{d})
+	heaps[d.heap].Remove(recvTimeout{d})
 	prev := d.basic.Unchain()
 	if prev != nil {
 		prev.Respond(res)
@@ -90,8 +89,8 @@ func (d *CDeadline) Respond(res Response) {
 }
 
 func (d *CDeadline) Cancel() {
-	d.heap.Remove(sendTimeout{d})
-	d.heap.Remove(recvTimeout{d})
+	heaps[d.heap].Remove(sendTimeout{d})
+	heaps[d.heap].Remove(recvTimeout{d})
 	if !d.state.Is(dsCanceling) {
 		prev := d.basic.Unchain()
 		if prev != nil {
