@@ -5,6 +5,7 @@ import (
 	"github.com/funny-falcon/go-iproto/util"
 	"log"
 	"sync"
+	"runtime"
 )
 
 var _ = log.Print
@@ -16,7 +17,7 @@ type CDeadline struct {
 	send, recv int32
 }
 
-var heaps = make([]CHeap, 4)
+var heaps = make([]CHeap, runtime.GOMAXPROCS(-1))
 var heapsI util.Atomic
 func init() {
 	for i:=0; i<cap(heaps); i++ {
