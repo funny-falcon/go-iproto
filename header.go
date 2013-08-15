@@ -18,13 +18,13 @@ func (h *Header) Init() {
 	h.rcode = h.buf[12:16]
 }
 
-func (h *Header) ReadRequest(r io.Reader) (req Request, err error) {
+func (h *Header) ReadRequest(r io.Reader) (req RequestHeader, err error) {
 	if _, err := io.ReadFull(r, h.head0); err != nil {
-		return Request{}, err
+		return RequestHeader{}, err
 	}
 
 	body_len := bin_le.Uint32(h.rlen)
-	req = Request{
+	req = RequestHeader{
 		Msg:  RequestType(bin_le.Uint32(h.rtype)),
 		Body: make([]byte, body_len),
 		Id:   bin_le.Uint32(h.rid),
@@ -35,38 +35,48 @@ func (h *Header) ReadRequest(r io.Reader) (req Request, err error) {
 	return
 }
 
+type readbyter interface {
+	ReadByte() (c byte, err error)
+}
+
 func (h *Header) ReadResponse(r io.Reader, retCodeLen int) (res Response, err error) {
-	var head []byte
 	var code RetCode
 
-	switch retCodeLen {
-	case 0:
-		head = h.head0
-	case 1:
-		head = h.head1
-	case 4:
-		head = h.head4
-	default:
-		panic("Unsupported retCodeLen")
-	}
-
-	if _, err := io.ReadFull(r, head); err != nil {
+	if _, err := io.ReadFull(r, h.head0); err != nil {
 		return Response{}, err
 	}
 
 	msg := RequestType(bin_le.Uint32(h.rtype))
 	body_len := bin_le.Uint32(h.rlen)
-	if body_len < uint32(retCodeLen) && msg != Ping {
-		code = RcShortBody
-	} else {
-		body_len -= uint32(retCodeLen)
-		switch retCodeLen {
-		case 0:
-			code = RcOK
-		case 1:
-			code = RetCode(h.rcode[0])
-		case 4:
-			code = RetCode(bin_le.Uint32(h.rcode))
+
+	if msg != Ping {
+		if body_len < uint32(retCodeLen) {
+			code = RcProtocolError
+		} else {
+			body_len -= uint32(retCodeLen)
+			switch retCodeLen {
+			case 0:
+				code = RcOK
+			case 1:
+				var c byte
+				var err error
+				switch rd := r.(type) {
+				case readbyter:
+					c, err = rd.ReadByte()
+				default:
+					_, err = io.ReadFull(r, h.rcode[:1])
+					c = h.rcode[0]
+				}
+				if err != nil {
+					return Response{}, err
+				}
+				code = RetCode(c)
+			case 4:
+				if _, err = io.ReadFull(r, h.rcode); err != nil {
+					return Response{}, err
+				}
+				code = RetCode(bin_le.Uint32(h.rcode))
+			}
 		}
 	}
 
@@ -77,15 +87,14 @@ func (h *Header) ReadResponse(r io.Reader, retCodeLen int) (res Response, err er
 		Id:   bin_le.Uint32(h.rid),
 	}
 
-	_, err = io.ReadFull(r, res.Body)
-	if res.Msg == Ping {
-		log.Print("Ping got: ", res.Msg, body_len, len(res.Body), res.Code, res.Id)
+	if len(res.Body) > 0 {
+		_, err = io.ReadFull(r, res.Body)
 	}
 
 	return
 }
 
-func (h *Header) WriteRequest(w io.Writer, req *Request) (err error) {
+func (h *Header) WriteRequest(w io.Writer, req RequestHeader) (err error) {
 	bin_le.PutUint32(h.rtype, uint32(req.Msg))
 	bin_le.PutUint32(h.rlen, uint32(len(req.Body)))
 	bin_le.PutUint32(h.rid, req.Id)

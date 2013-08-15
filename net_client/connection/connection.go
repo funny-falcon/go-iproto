@@ -11,20 +11,6 @@ import (
 	"sync"
 )
 
-type ConnControlKind int
-
-const (
-	CloseWrite = ConnControlKind(iota + 1)
-	ReadTimeout
-	WriteTimeout
-	PingInterval
-)
-
-type Control struct {
-	Kind     ConnControlKind
-	Duration time.Duration
-}
-
 type notifyAction uint32
 
 const (
@@ -65,74 +51,60 @@ type CConf struct {
 	WriteTimeout time.Duration
 	DialTimeout  time.Duration
 
-	SendTimeout  time.Duration
-	RecvTimeout  time.Duration
-
 	RetCodeLen int
 
 	ConnErr chan<- Error
 }
 
 type Connection struct {
-	Id uint32
+	iproto.SimplePoint
+	Id uint64
 	sync.Mutex
 	*CConf
 
 	conn NetConn
 
-	Control      chan Control
-	writeControl chan Control
+	closeWrite   chan bool
 	readErr      error
-	orphaned     bool
+	controlOk    bool
 
-	requests chan *iproto.Request
 	inFly    map[uint32]*Request
 	currentId  uint32
 
-	sendHeap, recvHeap heap
-
 	State        ConnState
+	shutdown     bool
 
 	readTimeout  nt.Timeout
 	writeTimeout nt.Timeout
 
 	loopNotify chan notifyAction
 }
+var _ iproto.EndPoint = (*Connection)(nil)
 
-func NewConnection(conf *CConf, id uint32) (conn *Connection) {
+func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 	conn = &Connection{
 		CConf: conf,
 		Id:    id,
 
-		Control:      make(chan Control, 1),
-		writeControl: make(chan Control, 2),
-		orphaned:     false,
+		controlOk:    true,
 
 		inFly:        make(map[uint32]*Request),
 		currentId:    1,
 
-		sendHeap:     heap{ heap: make([]*Request, 0, 128), kind: _send },
-		recvHeap:     heap{ heap: make([]*Request, 0, 128), kind: _recv },
-
-		readTimeout:  nt.Timeout{Timeout: conf.ReadTimeout},
-		writeTimeout: nt.Timeout{Timeout: conf.WriteTimeout},
+		readTimeout:  nt.Timeout{Timeout: conf.ReadTimeout, Kind: nt.Read},
+		writeTimeout: nt.Timeout{Timeout: conf.WriteTimeout, Kind: nt.Write},
 
 		loopNotify: make(chan notifyAction, 2),
 	}
-	conn.readTimeout.Init()
-	conn.writeTimeout.Init()
+	conn.SimplePoint.Init()
 	return
 }
 
 /* default 5 seconds interval for Connection */
 const DialTimeout = 5 * time.Second
 
-func (conn *Connection) IProtoStop() {
-	conn.Control <- Control{Kind: CloseWrite}
-}
-
-func (conn *Connection) IProtoRun(requests chan *iproto.Request) {
-	conn.requests = requests
+func (conn *Connection) Run(ch chan *iproto.Request) {
+	conn.SetChan(ch)
 	go conn.dial()
 }
 
@@ -152,104 +124,34 @@ func (conn *Connection) dial() {
 }
 
 /* RunWithConn is for testing purposes */
-func (conn *Connection) RunWithConn(requests chan *iproto.Request, netconn io.ReadWriteCloser) {
+func (conn *Connection) RunWithConn(netconn io.ReadWriteCloser) {
 	switch nc := netconn.(type) {
 	case NetConn:
 		conn.conn = nc
 	default:
 		conn.conn = rwcWrapper{ReadWriteCloser: netconn}
 	}
-	conn.requests = requests
 	conn.ConnErr <- Error{conn, Dial, nil}
 	go conn.readLoop()
 	go conn.writeLoop()
 	conn.controlLoop()
 }
 
-func (conn *Connection) putInFly(request *iproto.Request) {
-	conn.Lock()
-	defer conn.Unlock()
-	id := conn.currentId
-	_, ok := conn.inFly[id]
-	for ok {
-		id++
-		if id == iproto.PingRequestId {
-			id = 1
-		}
-		_, ok = conn.inFly[id]
-	}
-	req := &Request{ Request: request }
-	conn.sendHeap.Add(req)
-	conn.recvHeap.Add(req)
-	conn.inFly[id] = req
-}
-
-func (conn *Connection) respondInFly(res iproto.Response) {
-	conn.Lock()
-	defer conn.Unlock()
-	req := conn.inFly[res.Id]
-	delete(conn.inFly, res.Id)
-	if req == nil {
-		log.Panicf("No mathing request: %v %v", res.Msg, res.Id)
-	}
-	conn.sendHeap.Remove(req)
-	conn.recvHeap.Remove(req)
-	if req.Request != nil {
-		req.Response(res)
+func (conn *Connection) SetReadTimeout(t time.Duration) {
+	if conn.State & CsReadClosed == 0 {
+		conn.readTimeout.Set(conn.conn, t)
 	}
 }
 
-func (conn *Connection) flushInFly() {
-	var req *Request
-	conn.Lock()
-	defer conn.Unlock()
-	conn.sendHeap.heap = nil
-	conn.recvHeap.heap = nil
-
-	resp := iproto.Response{Code: iproto.RcIOError}
-	for resp.Id, req = range conn.inFly {
-		resp.Msg = req.Msg
-		req.Response(resp)
-	}
-	conn.inFly = nil
-}
-
-func (conn *Connection) checkControl() {
-	if conn.orphaned {
-		return
-	}
-	select {
-	case control, ok := <-conn.Control:
-		if !ok {
-			/* do not know what to do :( we are orphaned */
-			/* hope, reader and writer will signal us */
-			conn.orphaned = true
-			conn.conn.Close()
-		} else {
-			switch control.Kind {
-			case ReadTimeout:
-				if conn.State & CsReadClosed == 0 {
-					conn.readTimeout.Timeout = control.Duration
-					conn.readTimeout.DoAction(conn.conn, nt.Read, nt.Reset)
-				}
-			case WriteTimeout:
-				if conn.State & CsWriteClosed == 0 {
-					conn.writeTimeout.Timeout = control.Duration
-					conn.writeTimeout.DoAction(conn.conn, nt.Write, nt.Reset)
-				}
-			case CloseWrite, PingInterval:
-				conn.writeControl <- control
-			default:
-				log.Panicf("Unknown Connection control kind %d", control.Kind)
-			}
-		}
-	default:
+func (conn *Connection) SetWriteTimeout(t time.Duration) {
+	if conn.State & CsWriteClosed == 0 {
+		conn.readTimeout.Set(conn.conn, t)
 	}
 }
 
 func (conn *Connection) controlLoopExit() {
 	if conn.State & CsWriteClosed == 0 {
-		conn.writeControl <- Control{Kind: CloseWrite}
+		conn.Stop()
 	}
 	conn.ConnErr <- Error{conn, Read, conn.readErr}
 	conn.flushInFly()
@@ -259,23 +161,17 @@ func (conn *Connection) controlLoop() {
 	var closeReadCalled bool
 	defer conn.controlLoopExit()
 	for {
-		conn.checkControl()
-		select {
-		case action := <-conn.readTimeout.Actions:
-			conn.readTimeout.DoAction(conn.conn, nt.Read, action)
-		case action := <-conn.writeTimeout.Actions:
-			conn.readTimeout.DoAction(conn.conn, nt.Write, action)
-		case action := <-conn.loopNotify:
-			switch action {
-			case writeClosed:
-				conn.State |= CsWriteClosed
-			case readClosed:
-				conn.State |= CsReadClosed
-				if conn.State & CsWriteClosed == 0 {
-					conn.writeControl <- Control{Kind: CloseWrite}
-				}
+		action := <-conn.loopNotify
+		switch action {
+		case writeClosed:
+			conn.State |= CsWriteClosed
+		case readClosed:
+			conn.State |= CsReadClosed
+			if conn.State & CsWriteClosed == 0 {
+				conn.Stop()
 			}
 		}
+
 		if conn.State & CsWriteClosed == 0 {
 			if !closeReadCalled && len(conn.inFly) == 0 {
 				conn.conn.CloseRead()
@@ -285,6 +181,47 @@ func (conn *Connection) controlLoop() {
 				break
 			}
 		}
+	}
+}
+
+func (conn *Connection) putInFly(request *iproto.Request) *Request {
+	conn.Lock()
+	defer conn.Unlock()
+
+	id := conn.currentId
+	_, ok := conn.inFly[id]
+	for ok {
+		id++
+		if id == iproto.PingRequestId {
+			id = 1
+		}
+		_, ok = conn.inFly[id]
+	}
+	conn.currentId = id + 1
+	req := wrapRequest(conn, request, id)
+	if req.SetInFly() {
+		conn.inFly[id] = req
+		return req
+	}
+	return nil
+}
+
+func (conn *Connection) flushInFly() {
+	conn.Lock()
+	reqs := make([]*iproto.Request, len(conn.inFly))
+	for _, req := range conn.inFly {
+		reqs = append(reqs, req.Request)
+	}
+	conn.inFly = nil
+	conn.Unlock()
+
+	resp := iproto.Response{Code: iproto.RcIOError}
+	if conn.shutdown {
+		resp.Code = iproto.RcShutdown
+	}
+	for _, req := range reqs {
+		resp.Msg = req.Msg
+		req.Response(resp)
 	}
 }
 
@@ -298,14 +235,13 @@ func (conn *Connection) readLoop() {
 	header.Init()
 
 	defer conn.notifyLoop(readClosed)
+	defer conn.readTimeout.Freeze(nil)
 
 	read := bufio.NewReaderSize(conn.conn, 64*1024)
-	conn.readTimeout.PingAction(nt.UnFreeze)
-
-	timer := time.NewTimer(time.Hour)
+	conn.readTimeout.UnFreeze(conn.conn)
 
 	for {
-		conn.readTimeout.PingAction(nt.Reset)
+		conn.readTimeout.Reset(conn.conn)
 
 		if res, conn.readErr = header.ReadResponse(read, conn.RetCodeLen); conn.readErr != nil {
 			break
@@ -315,7 +251,20 @@ func (conn *Connection) readLoop() {
 			continue
 		}
 
-		conn.respondInFly(res)
+		conn.Lock()
+		req := conn.inFly[res.Id]
+		if req == nil {
+			log.Panicf("No mathing request: %v %v", res.Msg, res.Id)
+		}
+		conn.Unlock()
+
+		if ireq := req.Request; ireq != nil {
+			ireq.Response(res)
+		}
+
+		conn.Lock()
+		delete(req.conn.inFly, req.fakeId)
+		conn.Unlock()
 	}
 }
 
@@ -327,11 +276,19 @@ func (conn *Connection) writeLoop() {
 	var pingTicker *time.Ticker
 
 
-	write := bufio.NewWriterSize(conn.conn, 64*1024)
+	write := bufio.NewWriterSize(conn.conn, 16*1024)
+
+	if conn.PingInterval > 0 {
+		pingTicker = time.NewTicker(conn.PingInterval)
+	} else {
+		pingTicker = time.NewTicker(fakePingInterval)
+		pingTicker.Stop()
+	}
 
 	defer func() {
-		err = write.Flush()
-		if err == nil {
+		conn.writeTimeout.Freeze(nil)
+		pingTicker.Stop()
+		if err = write.Flush(); err == nil {
 			conn.conn.CloseWrite()
 		}
 		conn.notifyLoop(writeClosed)
@@ -340,86 +297,71 @@ func (conn *Connection) writeLoop() {
 
 	header.Init()
 
-	pingRequest := iproto.Request{
-		Msg:  iproto.Ping,
-		Body: make([]byte, 0),
-		Id:   iproto.PingRequestId,
-	}
-
-	if conn.PingInterval > 0 {
-		pingTicker = time.NewTicker(conn.PingInterval)
-	} else {
-		pingTicker = time.NewTicker(fakePingInterval)
-		pingTicker.Stop()
-	}
-	defer func() { pingTicker.Stop() }()
-
-	conn.writeTimeout.PingAction(nt.UnFreeze)
+	conn.writeTimeout.UnFreeze(conn.conn)
 Loop:
 	for {
 		var request *iproto.Request
-		var control Control
-		var okRequest, okControl bool
+		var req *Request
+		var okRequest, ping bool
+		var requestHeader iproto.RequestHeader
 
-		conn.writeTimeout.PingAction(nt.Reset)
+		conn.writeTimeout.Reset(conn.conn)
 
 		select {
-		case control, okControl = <-conn.writeControl:
+		case <-conn.ExitChan():
+		case request, okRequest = <-conn.ReceiveChan():
 		default:
+			if err = write.Flush(); err != nil {
+				break Loop
+			}
+			conn.writeTimeout.Freeze(conn.conn)
 			select {
 			case <-pingTicker.C:
-				request, okRequest = &pingRequest, true
-			case request, okRequest = <-conn.requests:
-			default:
-				write.Flush()
-				conn.writeTimeout.PingAction(nt.Freeze)
-				select {
-				case <-pingTicker.C:
-					request, okRequest = &pingRequest, true
-				case request, okRequest = <-conn.requests:
-				case control, okControl = <-conn.writeControl:
-				}
-				conn.writeTimeout.PingAction(nt.UnFreeze)
+				ping, okRequest = true, true
+			case request, okRequest = <-conn.ReceiveChan():
+			case <-conn.ExitChan():
 			}
-		}
-
-		if okControl {
-			switch control.Kind {
-			case CloseWrite:
-				break Loop
-			case PingInterval:
-				pingTicker.Stop()
-				if control.Duration > 0 {
-					pingTicker = time.NewTicker(control.Duration)
-				} else {
-					pingTicker = time.NewTicker(fakePingInterval)
-					pingTicker.Stop()
-				}
-				continue Loop
-			default:
-				log.Panicf("Write loop do not understand control.kind %d", control.Kind)
-			}
+			conn.writeTimeout.UnFreeze(conn.conn)
 		}
 
 		if !okRequest {
 			break
 		}
 
-		if request.Id != iproto.PingRequestId {
-			if !request.SetInFly() {
+		if ping {
+			requestHeader = iproto.RequestHeader{
+				Msg:  iproto.Ping,
+				Body: make([]byte, 0),
+				Id:   iproto.PingRequestId,
+			}
+		} else {
+			if request.SendExpired() {
 				continue
 			}
-			conn.putInFly(request)
+			if req = conn.putInFly(request); req == nil {
+				continue
+			}
+			requestHeader = iproto.RequestHeader{
+				Msg: request.Msg,
+				Id: req.fakeId,
+				Body: request.Body,
+			}
 		}
 
-		if err = header.WriteRequest(write, request); err != nil {
+		if err = header.WriteRequest(write, requestHeader); err != nil {
 			break
 		}
-
-		request.Body = nil
 	}
 }
 
-func (conn *Connection) Closing() bool {
-	return conn.closing
+func (conn *Connection) Closed() bool {
+	return conn.State & CsClosed != 0
+}
+
+func (conn *Connection) LocalAddr() net.Addr {
+	return conn.conn.LocalAddr()
+}
+
+func (conn *Connection) RemoteAddr() net.Addr {
+	return conn.conn.RemoteAddr()
 }

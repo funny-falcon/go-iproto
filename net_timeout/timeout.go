@@ -3,6 +3,7 @@ package net_timeout
 import (
 	"log"
 	"time"
+	"sync"
 )
 
 type SetDeadliner interface {
@@ -12,75 +13,78 @@ type SetDeadliner interface {
 
 type Timeout struct {
 	Timeout time.Duration
+	mutex   sync.Mutex
+	Kind    Kind
 	state   state
-	action  Action
-	Actions chan Action
 }
 
-func (tm *Timeout) Init() {
-	tm.state = frozen
-	tm.Actions = make(chan Action, 2)
+func (tm *Timeout) Set(i interface{}, timeout time.Duration) {
+	tm.Timeout = timeout
+	tm.Reset(i)
 }
 
-func (tm *Timeout) PingAction(action Action) {
-	curAction := tm.action
-	if curAction == action {
-		return
+func (tm *Timeout) Reset(i interface{}) {
+	tm.doAction(i, reset)
+}
+
+func (tm *Timeout) Freeze(i interface{}) {
+	tm.doAction(i, freeze)
+}
+
+func (tm *Timeout) UnFreeze(i interface{}) {
+	tm.doAction(i, unFreeze)
+}
+
+func (tm *Timeout) doAction(i interface{}, action action) (err error) {
+	tm.mutex.Lock()
+	defer tm.mutex.Unlock()
+
+	switch action {
+	case freeze:
+		tm.state &^= unfrozen
+	case unFreeze:
+		tm.state |= unfrozen
+	case reset:
 	}
-	if curAction == Freeze && action != UnFreeze {
-		return
-	}
-	tm.action = action
-	tm.Actions <- action
-}
 
-func (tm *Timeout) DoAction(i interface{}, kind Kind, action Action) (err error) {
 	conn, ok := i.(SetDeadliner)
 	if !ok {
 		return
 	}
 
-	switch action {
-	case Freeze:
-		tm.state |= frozen
-	case UnFreeze:
-		tm.state &^= frozen
-	case Reset:
-	}
-
-	if tm.state&frozen == 0 && tm.Timeout > 0 {
+	if tm.state&unfrozen != 0 && tm.Timeout > 0 {
 		deadline := time.Now().Add(tm.Timeout)
-		err = tm.set(conn, kind, deadline)
-	} else if tm.state&set != 0 && (tm.state&frozen != 0 || tm.Timeout == 0) {
-		err = tm.clear(conn, kind)
+		err = tm.set(conn, deadline)
+	} else if tm.state&unset == 0 && (tm.state&unfrozen == 0 || tm.Timeout == 0) {
+		err = tm.clear(conn)
 	}
 	return
 }
 
-func (tm *Timeout) clear(conn SetDeadliner, kind Kind) (err error) {
-	switch kind {
-	case Read:
-		err = conn.SetReadDeadline(time.Time{})
-		tm.state &^= set
-	case Write:
-		err = conn.SetWriteDeadline(time.Time{})
-		tm.state &^= set
-	default:
-		log.Panicf("Uknown Kind %d for tm", kind)
-	}
-	return
-}
-
-func (tm *Timeout) set(conn SetDeadliner, kind Kind, deadline time.Time) (err error) {
-	switch kind {
+func (tm *Timeout) set(conn SetDeadliner, deadline time.Time) (err error) {
+	switch tm.Kind {
 	case Read:
 		err = conn.SetReadDeadline(deadline)
-		tm.state |= set
+		tm.state &^= unset
 	case Write:
 		err = conn.SetWriteDeadline(deadline)
-		tm.state |= set
+		tm.state &^= unset
 	default:
-		log.Panicf("Uknown Kind %d for tm", kind)
+		log.Panicf("Uknown Kind %d for tm", tm.Kind)
+	}
+	return
+}
+
+func (tm *Timeout) clear(conn SetDeadliner) (err error) {
+	switch tm.Kind {
+	case Read:
+		err = conn.SetReadDeadline(time.Time{})
+		tm.state |= unset
+	case Write:
+		err = conn.SetWriteDeadline(time.Time{})
+		tm.state |= unset
+	default:
+		log.Panicf("Uknown Kind %d for tm", tm.Kind)
 	}
 	return
 }

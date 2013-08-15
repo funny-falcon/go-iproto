@@ -2,132 +2,191 @@ package iproto
 
 import (
 	"github.com/funny-falcon/go-iproto/util"
+	"log"
+	"time"
 )
 
-type Canceler interface {
-	Cancel()
+// RequestType is a iproto request tag which goes first in a packet
+type RequestType uint32
+
+const (
+	Ping = RequestType(0xFF00)
+)
+
+const (
+	PingRequestId = ^uint32(0)
+)
+
+type RequestHeader struct {
+	Msg      RequestType
+	Body     []byte
+	Id       uint32
 }
 
 type Request struct {
 	Msg      RequestType
-	Id       uint32
 	Body     []byte
-	Callback Callback
-	Canceler Canceler
-	Deadline Deadline
+	Id       uint32
 	state    util.Atomic
+	Responder Responder
+
+	Deadline     Epoch
+	/* WorkTime is a hint to EndPoint, will Deadline be reached if we send request now.
+	   If set, then sender will check: if Deadline - TypicalWorkTime is already expired,
+	   than it will not try to send Request to network */
+	WorkTime time.Duration
+
+	canceled  chan bool
 }
 
-func (r *Request) InitLinkCopy(cb Callback, req *Request) {
-	r.state = rsPending
-	r.Callback = cb
-	req.Canceler = r
-}
-
-func (r *Request) Cancel() {
-	if set, ok := r.GoingToCancel(); ok {
-		if set != rsPerformedToCancel {
-			if r.Canceler != nil && set != rsPreparedToCancel {
-				r.Canceler.Cancel()
-			} else {
-				r.state.Store(rsCanceled)
-				r.ResponseCancel()
-			}
-		}
+func (r *Request) Send(serv EndPoint) bool {
+	if !r.SetPending() {
+		log.Panic("Request already sent somewhere")
+		return false
 	}
-	return
-}
+	if r.Deadline.Zero() {
+		r.Deadline = serv.DefaultDeadline()
+	}
+	if r.WorkTime == 0 {
+		r.WorkTime = serv.TypicalWorkTime(r.Msg)
+	}
 
-func (r *Request) GoingToCancel() (util.Atomic, bool) {
-	var old, set util.Atomic
-	for {
-		old = r.state.Get()
-		if old == rsNew || old == rsPending || old == rsInFly {
-			set = rsToCancel
-		} else if old == rsPrepared {
-			set = rsPreparedToCancel
-		} else if old == rsPerformed {
-			set = rsPerformedToCancel
-		} else {
-			return 0, false
-		}
-		if r.state.CAS(old, set) {
-			return set, true
-		}
+	wrapInDeadline(r)
+
+	select {
+	case serv.RequestChan() <- r:
+		return true
+	case <-r.canceled:
+		return false
 	}
 }
 
-func (r *Request) SetCanceled() bool {
-	old := r.state.Get()
-	if old == rsToCancel || old == rsPreparedToCancel {
-		return r.state.CAS(old, rsCanceled)
-	}
-	return false
+func (r *Request) SendExpired() bool {
+	return r.Deadline.WillExpire(r.WorkTime)
 }
 
-func (r *Request) SetRetryCanceled() bool {
-	return r.state.CAS(rsPerformedToCancel, rsCanceled)
+func (r *Request) Expired() bool {
+	return r.Deadline.WillExpire(0)
 }
 
-func (r *Request) Canceled() bool {
-	return r.state.Is(rsCanceled)
+func (r *Request) CancelChan() <-chan bool {
+	return r.canceled
 }
 
 func (r *Request) SetPending() bool {
 	return r.state.CAS(rsNew, rsPending)
 }
 
+// SetInFly should be called when you going to work with request.
 func (r *Request) SetInFly() bool {
 	return r.state.CAS(rsPending, rsInFly)
 }
 
-func (r *Request) SetPrepared() bool {
+func (r *Request) setPrepared() bool {
 	return r.state.CAS(rsInFly, rsPrepared)
 }
 
-func (r *Request) SetPerformed() bool {
-	return r.state.CAS(rsPrepared, rsPerformed)
+func (r *Request) setPerformed() bool {
+	if r.state.CAS(rsPrepared, rsPerformed) {
+		return true
+	}
+	return r.state.CAS(rsPreparedIgnoreCancel, rsPerformed)
 }
 
-// ResetToPending is for Resenders on IOError
-func (r *Request) ResetToPending() bool {
-	var old util.Atomic
+func (r *Request) doCancel() {
+	if r.Responder != nil {
+		r.Responder.Cancel()
+	}
+	select {
+	case r.canceled <- true:
+	default:
+	}
+	r.state.Store(rsCanceled)
+	r.Responder = nil
+}
+
+func (r *Request) Cancel() bool {
+	if r.goingToCancel() {
+		r.doCancel()
+		return true
+	}
+	return false
+}
+
+func (r *Request) expireSend() bool {
+	return r.state.CAS(rsPending, rsToCancel)
+}
+
+func (r *Request) goingToCancel() (willCancel bool) {
+	var old, set util.Atomic
 	for {
-		if old == rsPerformed {
-			if r.state.CAS(old, rsPending) {
-				return true
-			}
-		} else if old == rsPerformedToCancel {
-			if r.state.CAS(old, rsCanceled) {
-				r.ResponseCancel()
-				return false
-			}
+		old, set = r.state.Get(), 0
+		willCancel = false
+		if old == rsNew || old == rsPending || old == rsInFly {
+			set = rsToCancel
+			willCancel = true
+		} else if old == rsPrepared {
+			set = rsPreparedIgnoreCancel
 		} else {
-			return false
+			return
+		}
+		if r.state.CAS(old, set) {
+			return
 		}
 	}
 }
 
-func (r *Request) Response(res Response) {
-	r.SetPending()
-	r.SetInFly()
-	if r.SetPrepared() && r.SetPerformed() {
-		r.Canceler = nil
-		if res.Code == RcCanceled {
-			r.state.Store(rsCanceled)
-		}
-		r.Callback.Response(res)
+/* Canceled returns: did some called Cancel() and it were successful.
+   Note, that Canceler callback could be not called yet at this point of time.
+   Also, only positive answer is trustful, since some could call Cancel() just
+   after this function returns
+   */
+func (r *Request) Canceled() bool {
+	st := r.state.Get()
+	return st == rsToCancel || st == rsPreparedToCancel || st == rsCanceled
+}
+
+// ResetToPending is for Resenders on IOError. It should be called in a Responder.
+// Note, if it returns false, then Responder is already performed
+func (r *Request) ResetToPending(res Response, originalResponder Responder) bool {
+	if r.state.CAS(rsPrepared, rsPending) {
+		return true
 	}
+	if r.state.Is(rsPreparedIgnoreCancel) {
+		originalResponder.Respond(res)
+		return false
+	}
+	log.Panicf("ResetToPending should be called only for performed requests")
+	return false
 }
 
-func (r *Request) ResponseCancel() {
-	r.Canceler = nil
-	res := Response{Msg: r.Msg, Id: r.Id, Code: RcCanceled}
-	r.Callback.Response(res)
+func (r *Request) Response(res Response) (respondCalled bool) {
+	if r.setPrepared() {
+		r.Responder.Respond(res)
+		r.setPerformed()
+		return true
+	}
+	return false
 }
 
-func (r *Request) Performed() bool {
-	return r.state.Is(rsPerformed)
+func (r *Request) ResponseRecvTimeout() (respondCalled bool) {
+	if r.setPrepared() {
+		res := Response { Id: r.Id, Msg: r.Msg, Code: RcRecvTimeout }
+		r.Responder.Respond(res)
+		r.setPerformed()
+		return true
+	}
+	return false
+}
+
+func (r *Request) ResponseIOError() (respondCalled bool) {
+	if r.setPrepared() {
+		res := Response { Id: r.Id, Msg: r.Msg, Code: RcIOError }
+		r.Responder.Respond(res)
+		r.setPerformed()
+		return false
+	}
+	return true
 }
 
 const (
@@ -139,5 +198,5 @@ const (
 	rsToCancel
 	rsCanceled
 	rsPreparedToCancel
-	rsPerformedToCancel
+	rsPreparedIgnoreCancel
 )

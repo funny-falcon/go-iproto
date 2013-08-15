@@ -1,77 +1,99 @@
 package iproto
 
+import (
+	"time"
+	"log"
+)
+
+var _ = log.Print
+
 type EndPoint interface {
-	IProtoStop()
-	IProtoRun(chan *Request)
+	Run(chan *Request)
+	Stop()
 	RequestChan() chan<- *Request
-	DefaultDeadline() Deadline
-	DefaultTimeout() Timeout
+	DefaultDeadline() Epoch
+	TypicalWorkTime(RequestType) time.Duration
 }
 
-type SimplePoint chan *Request
+//   SimplePoint is a simple EndPoint implementation.
+//   One could start implementing by embedding it and overriding Run method and setting OnExit
+//       type MyEndPoint struct {
+//	       iproto.SimplePoint
+//	       /* custom fields */
+//       }
+//       func (e *MyEndPoint) Init() {
+//	       e.SimplePoint.OnExit = e.Exit
+//	       e.SimplePoint.Init()
+//       }
+//       func (e *MyEndPoint) Run() {
+//	       /* custom logick */
+//       }
+type SimplePoint struct {
+	requests chan *Request
+	exit     chan bool
+}
+var _ EndPoint = (*SimplePoint)(nil)
 
-func (s SimplePoint) RequestChan() chan<- *Request {
-	return (chan<- *Request)(s)
+func (s *SimplePoint) SetChan(ch chan *Request) {
+	s.requests = ch
 }
 
-func (s SimplePoint) DefaultDeadline() (d Deadline) {
+func (s *SimplePoint) RequestChan() chan<- *Request {
+	return s.requests
+}
+
+func (s *SimplePoint) ReceiveChan() <-chan *Request {
+	return s.requests
+}
+
+func (s *SimplePoint) RunChild(p EndPoint) {
+	p.Run(s.requests)
+}
+
+func (s *SimplePoint) DefaultDeadline() (d Epoch) {
 	return
 }
 
-func (s SimplePoint) DefaultTimeout() (d Timeout) {
+func (s *SimplePoint) TypicalWorkTime(RequestType) (d time.Duration) {
 	return
 }
 
-func sendRequest(serv EndPoint, req *Request) {
-	serv.RequestChan() <- req
+func (s *SimplePoint) Init() {
+	s.exit = make(chan bool)
 }
 
-func Send(serv EndPoint, request Request) Canceler {
-	deadline := request.Deadline
-	if deadline.Zero() {
-		deadline = serv.DefaultDeadline()
-	}
-	req := &Request{
-		Id:       request.Id,
-		Msg:      request.Msg,
-		Body:     request.Body,
-		Callback: request.Callback,
-		Deadline: deadline,
-	}
-	req.SetPending()
-
-	serv.RequestChan() <- req
-	return req
+func (s *SimplePoint) ExitChan() <-chan bool {
+	return s.exit
 }
 
-func SendDeadline(serv EndPoint, request Request, deadline Deadline) Canceler {
-	if deadline.Zero() {
-		deadline = serv.DefaultDeadline()
-	}
-	req := &Request{
-		Id:       request.Id,
-		Msg:      request.Msg,
-		Body:     request.Body,
-		Callback: request.Callback,
-		Deadline: deadline,
-	}
-	req.SetPending()
-	serv.RequestChan() <- req
-	return req
+// Run - main function to override. Example
+//     func (s *MyEndPoint) Run(ch chan *Request) {
+//     	s.SetChan(ch)
+//     	go func() {
+//     		for {
+//     			select {
+//     			case req, ok := <-s.requests:
+//     				if ok {
+//     					if req.SetInFly() && !req.Expired() {
+//     						s.doSomethingUseful(req)
+//     					}
+//     				} else {
+//     					return
+//     				}
+//     			case <-s.exit:
+//     				return
+//     			}
+//     		}
+//     	}()
+//     }
+func (s *SimplePoint) Run(ch chan *Request) {
+	panic("(*SimplePoint).Run should be overrided")
 }
 
-func SendTimeout(serv EndPoint, request Request, timeout Timeout) Canceler {
-	if timeout.Zero() {
-		timeout = serv.DefaultTimeout()
-	}
-	req := &Request{
-		Id:       request.Id,
-		Msg:      request.Msg,
-		Body:     request.Body,
-		Callback: request.Callback,
-		Deadline: timeout.NowDeadline(),
-	}
-	req.SetPending()
-	serv.RequestChan() <- req
-	return req
+func (s *SimplePoint) Stop() {
+	s.exit <- true
+}
+
+func (s *SimplePoint) doSomethingUseful(req *Request) {
+	req.ResponseIOError()
 }

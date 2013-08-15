@@ -3,7 +3,6 @@ package net_client
 import (
 	"github.com/funny-falcon/go-iproto"
 	"github.com/funny-falcon/go-iproto/net_client/connection"
-	"github.com/funny-falcon/go-iproto/util"
 	"log"
 	"time"
 )
@@ -20,11 +19,9 @@ type conf struct {
 
 type actionKind int
 const (
-	exit = actionKind(iota+1)
-	setServ
+	setServ = actionKind(iota+1)
 	setReadTimeout
 	setWriteTimeout
-	setPingInterval
 )
 
 type action struct {
@@ -38,14 +35,14 @@ type Server struct {
 
 	iproto.SimplePoint
 
-	connections util.IdGenerator
+	connections map[uint64]*connection.Connection
+	curId       uint64
 	needConns   int
 	dialing     int
 	established int
 	dying       int
 
-	connErr   chan connection.Error
-
+	connErr     chan connection.Error
 	actions     chan action
 	exiting     bool
 }
@@ -72,49 +69,47 @@ func (cfg *ServerConf) NewServer() (serv *Server) {
 		},
 		connErr: make(chan connection.Error, 4),
 		actions: make(chan action, 1),
+		connections: make(map[uint64]*connection.Connection),
 	}
 
-	serv.connections.Init(0, ^uint32(0))
-
-	serv.CConf.ConnErr = serv.connErr
+	serv.SimplePoint.Init()
+	serv.ConnErr = serv.connErr
 
 	return
 }
 
-func (serv *Server) IProtoRun(requests chan *iproto.Request) {
-	serv.SimplePoint = requests
+func (serv *Server) Run(ch chan *iproto.Request) {
+	serv.SetChan(ch)
 	serv.needConns = serv.Connections
 	serv.fixConnections()
 	go serv.Loop()
 }
 
-func (serv *Server) IProtoStop() {
-	serv.actions <- action{ kind: exit }
-}
-
 func (serv *Server) fixConnections() {
-	for ;serv.dialing + serv.established < serv.needConns; serv.dialing++ {
-		var id uint32
-		var err error
-		if id, err = serv.connections.Next(); err != nil {
-			log.Panic("Could not generate ID for connection", err)
-		}
-		conn := connection.NewConnection(&serv.CConf, id)
-		serv.connections.Set(id, conn)
-		conn.IProtoRun(serv.SimplePoint)
+	needConn := serv.needConns - serv.dialing + serv.established
+	for ; needConn > 0; needConn-- {
+		serv.curId++
+		conn := connection.NewConnection(&serv.CConf, serv.curId)
+		serv.connections[serv.curId] = conn
+		serv.RunChild(conn)
+		serv.dialing++
 	}
-	if serv.dialing + serv.established > serv.needConns {
-		for _, i := range serv.connections.Holded() {
-			conn := i.(connection.Connection)
-			conn.Control <- connection.Control{ Kind: connection.CloseWrite }
+	if needConn < 0 {
+		for _, conn := range serv.connections {
+			switch conn.State {
+			case connection.CsDialing:
+				conn.Stop()
+				serv.dialing--
+				needConn++
+			case connection.CsConnected:
+				conn.Stop()
+				serv.established--
+				needConn++
+			}
+			if needConn == 0 {
+				break
+			}
 		}
-	}
-}
-
-func (serv *Server) notifyConnections(kind connection.ConnControlKind, duration time.Duration) {
-	for _, i := range serv.connections.Holded() {
-		con := i.(connection.Connection)
-		con.Control <- connection.Control{ Kind: kind, Duration: duration }
 	}
 }
 
@@ -124,26 +119,15 @@ func (serv *Server) Name() string {
 
 func (serv *Server) Loop() {
 	for {
-		select { case connErr := <-serv.connErr:
+		select {
+		case <-serv.ExitChan():
+			serv.needConns = 0
+			serv.exiting = true
+			break
+		case connErr := <-serv.connErr:
 			serv.onConnError(connErr)
 		case action := <-serv.actions:
-			switch action.kind {
-			case setServ:
-				serv.Connections = action.servs
-				serv.needConns = action.servs
-			case exit:
-				serv.needConns = 0
-				serv.exiting = true
-			case setReadTimeout:
-				serv.CConf.ReadTimeout = action.timeout
-				serv.notifyConnections(connection.ReadTimeout, action.timeout)
-			case setWriteTimeout:
-				serv.CConf.WriteTimeout = action.timeout
-				serv.notifyConnections(connection.WriteTimeout, action.timeout)
-			case setPingInterval:
-				serv.CConf.PingInterval = action.timeout
-				serv.notifyConnections(connection.PingInterval, action.timeout)
-			}
+			serv.onAction(action)
 		}
 
 		if serv.exiting && serv.established + serv.dialing == 0 {
@@ -152,30 +136,65 @@ func (serv *Server) Loop() {
 	}
 }
 
+func (serv *Server) onAction(action action) {
+	switch action.kind {
+	case setServ:
+		serv.Connections = action.servs
+		serv.needConns = action.servs
+		serv.fixConnections()
+	case setReadTimeout:
+		serv.ReadTimeout = action.timeout
+		for _, conn := range serv.connections  {
+			conn.SetReadTimeout(action.timeout)
+		}
+	case setWriteTimeout:
+		serv.WriteTimeout = action.timeout
+		for _, conn := range serv.connections  {
+			conn.SetWriteTimeout(action.timeout)
+		}
+	}
+}
+
 func (serv *Server) onConnError(connErr connection.Error) {
+	conn := connErr.Conn
 	switch connErr.When {
 	case connection.Dial:
 		serv.dialing--
 		if connErr.Error == nil {
+			log.Printf("%s: established connection %v -> %v", serv.conf.Name, conn.LocalAddr(), conn.RemoteAddr())
 			serv.established++
 		} else {
-			if serv.connections.Remove(connErr.Conn.Id) == nil {
-				log.Panicf("Unknown connection failed %+v", connErr.Conn)
+			log.Printf("%s: could not connect to %v", serv.conf.Name, conn.LocalAddr(), conn.RemoteAddr())
+			if _, ok := serv.connections[conn.Id]; !ok {
+				log.Panicf("Unknown connection failed %+v", conn)
 			}
+			delete(serv.connections, conn.Id)
 			serv.fixConnections()
 		}
 	case connection.Write:
+		log.Printf("%s: write side closed %v -> %v", serv.conf.Name, conn.LocalAddr(), conn.RemoteAddr())
 		serv.established--
 		serv.dying++
 		serv.fixConnections()
 	case connection.Read:
+		log.Printf("%s: read side closed %v -> %v", serv.conf.Name, conn.LocalAddr(), conn.RemoteAddr())
 		serv.dying--
-		if serv.connections.Remove(connErr.Conn.Id) == nil {
-			log.Panicf("Unknown connection failed %+v", connErr.Conn)
+		if _, ok := serv.connections[conn.Id]; !ok {
+			log.Panicf("Unknown connection failed %+v", conn)
 		}
+		delete(serv.connections, conn.Id)
+		serv.fixConnections()
 	}
 }
 
 func (serv *Server) SetConnections(n int) {
 	serv.actions <- action{ kind: setServ, servs: n }
+}
+
+func (serv *Server) SetReadTimeout(timeout time.Duration) {
+	serv.actions <- action{ kind: setReadTimeout, timeout: timeout }
+}
+
+func (serv *Server) SetWriteTimeout(timeout time.Duration) {
+	serv.actions <- action{ kind: setWriteTimeout, timeout: timeout }
 }

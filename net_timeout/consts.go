@@ -7,19 +7,19 @@ const (
 	Write
 )
 
-type Action uint32
+type action uint32
 
 const (
-	Reset = Action(iota + 1)
-	Freeze
-	UnFreeze
+	reset = action(iota + 1)
+	freeze
+	unFreeze
 )
 
 type state uint32
 
 const (
-	set = state(1 << iota)
-	frozen
+	unset = state(1 << iota)
+	unfrozen
 )
 
 const (

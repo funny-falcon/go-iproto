@@ -1,116 +1,103 @@
 package iproto
 
 import (
-	"errors"
-	"log"
 	"time"
+	"github.com/funny-falcon/go-iproto/util"
+	"log"
 )
 
-// Timeout is a default timeouts for requests sent to service.
-type Timeout struct {
-	Send    time.Duration
-	Receive time.Duration
+var _ = log.Print
+
+type Deadline struct {
+	basic BasicResponder
+	send *time.Timer
+	recv *time.Timer
+	state util.Atomic
 }
 
-// SetDefaults will return new Timeout with "fixed" Send and Receive values
-// Note:
-// - if Receive is 0 , than Send also 0
-// - Receive automatically adjusted to 1ms, if it is not zero and less than 1ms
-// - Send could not be greater than Receive
-// - if Send == 0, than Send = (Receive > 10ms) ? Receive - 5ms : Receive / 2
-func (tm Timeout) SetDefaults() Timeout {
-	if tm.Receive == 0 {
-		tm.Send = 0
-		return tm
+const (
+	dsNil  = util.Atomic(iota)
+	dsCanceling
+	dsResponding
+)
+
+func expireSend(r *Request) {
+}
+
+func wrapInDeadline(r *Request) {
+	if r.Deadline.Zero() {
+		return
 	}
-	if tm.Receive < time.Millisecond {
-		tm.Receive = time.Millisecond
+	d := Deadline{}
+	d.Wrap(r)
+}
+
+func (d *Deadline) Wrap(r *Request) {
+	if r.Deadline.Zero() {
+		return
 	}
-	if tm.Send > tm.Receive {
-		log.Panicf("iproto.Timeout.Send should not be greater than Receive (got %s > %s)", tm.Send, tm.Receive)
+
+	r.canceled = make(chan bool, 1)
+
+	now := NowEpoch()
+	recvRemains := r.Deadline.Sub(now)
+	sendRemains := recvRemains - r.WorkTime
+	d.basic.Chain(r)
+
+	if sendRemains < 0 {
+		d.sendExpired()
+		return
 	}
-	if tm.Send == 0 {
-		switch {
-		case tm.Receive > 10*time.Millisecond:
-			tm.Send = tm.Receive - 5*time.Millisecond
-		default:
-			tm.Send = tm.Receive / 2
+
+	d.send = time.AfterFunc(sendRemains, d.sendExpired)
+	d.recv = time.AfterFunc(recvRemains, d.recvExpired)
+}
+
+func (d *Deadline) sendExpired() {
+	r := d.basic.Request
+	if r != nil && r.expireSend() {
+		d.state.Store(dsCanceling)
+		r.doCancel()
+		res := Response { Id: r.Id, Msg: r.Msg, Code: RcSendTimeout }
+		if prev := d.basic.Unchain(); prev != nil {
+			prev.Respond(res)
 		}
 	}
-	return tm
 }
 
-func (tm Timeout) Zero() bool {
-	return tm.Receive <= 0
-}
-
-func (tm Timeout) Deadline(now time.Time) (d Deadline) {
-	if tm.Receive == 0 {
-		return
-	}
-	tm = tm.SetDefaults()
-	eNow := NewEpoch(now)
-	d.Send = eNow.Add(tm.Send)
-	d.Receive = eNow.Add(tm.Receive)
-	return
-}
-
-func (tm Timeout) NowDeadline() Deadline {
-	return tm.Deadline(time.Now())
-}
-
-var DeadlineInPast = errors.New("Deadline is in a past")
-
-// Deadline is a last point in time when request should be performed.
-// Deadline.Send is a last time when request could be sent to a socket
-// Deadline.Receive is a last time when service will react on receiving response
-// When any of Send or Receive time expires, service will call callback with error,
-// and request Code will be set to iproto.RC_Timeout
-type Deadline struct {
-	Send    Epoch
-	Receive Epoch
-}
-
-func (d Deadline) SendTime() time.Time {
-	return d.Send.Time()
-}
-
-func (d Deadline) ReceiveTime() time.Time {
-	return d.Receive.Time()
-}
-
-func (d Deadline) Zero() bool {
-	return d.Receive.Zero()
-}
-
-func (d Deadline) Check() {
-	if d.Send > d.Receive {
-		log.Panicf("Send should not be after Recv (%v is after %v)", d.Send, d.Receive)
+func (d *Deadline) recvExpired() {
+	r := d.basic.Request
+	if r != nil && r.goingToCancel() {
+		d.state.Store(dsCanceling)
+		r.doCancel()
+		res := Response { Id: r.Id, Msg: r.Msg, Code: RcRecvTimeout }
+		if prev := d.basic.Unchain(); prev != nil {
+			prev.Respond(res)
+		}
 	}
 }
 
-// NewRecvDeadline returns new deadline for given receive timeout
-func NewRecvDeadline(recv time.Time) (d Deadline, err error) {
-	now := time.Now()
-	if recv.Before(now) {
-		err = DeadlineInPast
-		return
+func (d *Deadline) Respond(res Response) {
+	d.state.Store(dsResponding)
+	d.send.Stop()
+	d.recv.Stop()
+	prev := d.basic.Unchain()
+	if prev != nil {
+		prev.Respond(res)
 	}
-	tm := Timeout{Receive: recv.Sub(now)}
-	d = tm.Deadline(now)
-	return
 }
 
-// NewSendRecvDeadline returns new deadline for given send and recv points in time
-func NewSendRecvDeadline(send, recv time.Time) (d Deadline, err error) {
-	now := time.Now()
-	if recv.Before(now) || send.Before(now) {
-		err = DeadlineInPast
-		return
+func (d *Deadline) Cancel() {
+	log.Print("Deadline cancel")
+	d.send.Stop()
+	d.recv.Stop()
+	if !d.state.Is(dsCanceling) {
+		log.Print("Deadline cancel but not canceling")
+		prev := d.basic.Unchain()
+		if prev != nil {
+			prev.Cancel()
+		}
 	}
-	tm := Timeout{Receive: recv.Sub(now), Send: send.Sub(now)}
-	d = tm.Deadline(now)
-	return
 }
 
 type Epoch time.Duration
@@ -129,16 +116,16 @@ func (e Epoch) Before(o Epoch) bool {
 	return e < o
 }
 
-func (e Epoch) SubTime(tm time.Time) time.Duration {
-	return time.Duration(e) - tm.Sub(epoch)
-}
-
 func (e Epoch) Sub(o Epoch) time.Duration {
 	return time.Duration(e - o)
 }
 
 func (e Epoch) Add(dur time.Duration) Epoch {
 	return e + Epoch(dur)
+}
+
+func (e Epoch) SubTime(tm time.Time) time.Duration {
+	return time.Duration(e) - tm.Sub(epoch)
 }
 
 func (e Epoch) Time() time.Time {
@@ -153,6 +140,11 @@ func (e Epoch) Zero() bool {
 	return e == 0
 }
 
+func (e Epoch) WillExpire(after time.Duration) bool {
+	return e > 0 && e - Epoch(after) < NowEpoch()
+}
+
 func (e Epoch) String() string {
 	return e.Time().String()
 }
+
