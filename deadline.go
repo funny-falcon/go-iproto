@@ -85,8 +85,8 @@ func (d *CDeadline) Respond(res Response) {
 }
 
 func (d *CDeadline) Cancel() {
-	heaps[d.heap].Remove(sendTimeout{d})
-	heaps[d.heap].Remove(recvTimeout{d})
+	d.heap.Remove(sendTimeout{d})
+	d.heap.Remove(recvTimeout{d})
 	if !d.state.Is(dsCanceling) {
 		prev := d.basic.Unchain()
 		if prev != nil {
