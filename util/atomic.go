@@ -27,6 +27,10 @@ func (r *Atomic) Incr() Atomic {
 	return Atomic(atomic.AddUint32((*uint32)(r), 1))
 }
 
+func (r *Atomic) Decr() Atomic {
+	return Atomic(atomic.AddUint32((*uint32)(r), ^uint32(0)))
+}
+
 type Synced struct {
 	sync.Mutex
 	State uint32

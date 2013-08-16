@@ -68,8 +68,7 @@ type Connection struct {
 	readErr      error
 	controlOk    bool
 
-	inFly    map[uint32]*Request
-	currentId  uint32
+	inFly        RequestHolder
 
 	State        ConnState
 	shutdown     bool
@@ -88,8 +87,7 @@ func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 
 		controlOk:    true,
 
-		inFly:        make(map[uint32]*Request),
-		currentId:    1,
+		inFly:        RequestHolder{reqs: make(reqMap)},
 
 		readTimeout:  nt.Timeout{Timeout: conf.ReadTimeout, Kind: nt.Read},
 		writeTimeout: nt.Timeout{Timeout: conf.WriteTimeout, Kind: nt.Write},
@@ -173,7 +171,7 @@ func (conn *Connection) controlLoop() {
 		}
 
 		if conn.State & CsWriteClosed == 0 {
-			if !closeReadCalled && len(conn.inFly) == 0 {
+			if !closeReadCalled && conn.inFly.count.Get() == 0 {
 				conn.conn.CloseRead()
 				closeReadCalled = true
 			}
@@ -185,35 +183,18 @@ func (conn *Connection) controlLoop() {
 }
 
 func (conn *Connection) putInFly(request *iproto.Request) *Request {
-	conn.Lock()
-	defer conn.Unlock()
-
-	id := conn.currentId
-	_, ok := conn.inFly[id]
-	for ok {
-		id++
-		if id == iproto.PingRequestId {
-			id = 1
-		}
-		_, ok = conn.inFly[id]
-	}
-	conn.currentId = id + 1
-	req := wrapRequest(conn, request, id)
+	req := conn.inFly.getNext(conn)
+	req.Chain(request)
 	if req.SetInFly() {
-		conn.inFly[id] = req
 		return req
 	}
+	conn.inFly.putBack(req)
 	return nil
 }
 
 func (conn *Connection) flushInFly() {
-	conn.Lock()
-	reqs := make([]*iproto.Request, len(conn.inFly))
-	for _, req := range conn.inFly {
-		reqs = append(reqs, req.Request)
-	}
-	conn.inFly = nil
-	conn.Unlock()
+	reqs := conn.inFly.getAll()
+	conn.inFly = RequestHolder{}
 
 	resp := iproto.Response{Code: iproto.RcIOError}
 	if conn.shutdown {
@@ -251,20 +232,16 @@ func (conn *Connection) readLoop() {
 			continue
 		}
 
-		conn.Lock()
-		req := conn.inFly[res.Id]
+		req := conn.inFly.get(res.Id)
 		if req == nil {
 			log.Panicf("No mathing request: %v %v", res.Msg, res.Id)
 		}
-		conn.Unlock()
 
 		if ireq := req.Request; ireq != nil {
 			ireq.Response(iproto.Response(res))
 		}
 
-		conn.Lock()
-		delete(req.conn.inFly, req.fakeId)
-		conn.Unlock()
+		conn.inFly.putBack(req)
 	}
 }
 
