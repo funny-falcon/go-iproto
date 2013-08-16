@@ -1,18 +1,17 @@
 package iproto
 
 import (
-	"time"
 	"github.com/funny-falcon/go-iproto/util"
 	"log"
 )
 
 var _ = log.Print
 
-type Deadline struct {
+type CDeadline struct {
 	basic BasicResponder
-	send *time.Timer
-	recv *time.Timer
 	state util.Atomic
+	heap  heapRef
+	send, recv uint32
 }
 
 const (
@@ -21,18 +20,15 @@ const (
 	dsResponding
 )
 
-func expireSend(r *Request) {
-}
-
-func wrapInDeadline(r *Request) {
+func wrapInCDeadline(r *Request) {
 	if r.Deadline.Zero() {
 		return
 	}
-	d := Deadline{}
+	d := CDeadline{}
 	d.Wrap(r)
 }
 
-func (d *Deadline) Wrap(r *Request) {
+func (d *CDeadline) Wrap(r *Request) {
 	if r.Deadline.Zero() {
 		return
 	}
@@ -49,11 +45,12 @@ func (d *Deadline) Wrap(r *Request) {
 		return
 	}
 
-	d.send = time.AfterFunc(sendRemains, d.sendExpired)
-	d.recv = time.AfterFunc(recvRemains, d.recvExpired)
+	d.heap = getHeap()
+	d.heap.Insert(sendTimeout{d})
+	d.heap.Insert(recvTimeout{d})
 }
 
-func (d *Deadline) sendExpired() {
+func (d *CDeadline) sendExpired() {
 	r := d.basic.Request
 	if r != nil && r.expireSend() {
 		d.state.Store(dsCanceling)
@@ -65,7 +62,7 @@ func (d *Deadline) sendExpired() {
 	}
 }
 
-func (d *Deadline) recvExpired() {
+func (d *CDeadline) recvExpired() {
 	r := d.basic.Request
 	if r != nil && r.goingToCancel() {
 		d.state.Store(dsCanceling)
@@ -77,25 +74,69 @@ func (d *Deadline) recvExpired() {
 	}
 }
 
-func (d *Deadline) Respond(res Response) {
+func (d *CDeadline) Respond(res Response) {
 	d.state.Store(dsResponding)
-	d.send.Stop()
-	d.recv.Stop()
+	d.heap.Remove(sendTimeout{d})
+	d.heap.Remove(recvTimeout{d})
 	prev := d.basic.Unchain()
 	if prev != nil {
 		prev.Respond(res)
 	}
 }
 
-func (d *Deadline) Cancel() {
-	log.Print("Deadline cancel")
-	d.send.Stop()
-	d.recv.Stop()
+func (d *CDeadline) Cancel() {
+	heaps[d.heap].Remove(sendTimeout{d})
+	heaps[d.heap].Remove(recvTimeout{d})
 	if !d.state.Is(dsCanceling) {
-		log.Print("Deadline cancel but not canceling")
 		prev := d.basic.Unchain()
 		if prev != nil {
 			prev.Cancel()
 		}
 	}
+}
+
+type sendTimeout struct {
+	*CDeadline
+}
+
+func (s sendTimeout) Value() int64 {
+	d := s.CDeadline
+	req := d.basic.Request
+	return int64(req.Deadline) - int64(req.WorkTime)
+}
+func (s sendTimeout) Index() int {
+	d := s.CDeadline
+	return int(d.send)
+}
+func (s sendTimeout) SetIndex(i int) {
+	d := s.CDeadline
+	d.send = uint32(i)
+}
+
+func (s sendTimeout) Expire() {
+	d := s.CDeadline
+	d.sendExpired()
+}
+
+type recvTimeout struct {
+	*CDeadline
+}
+
+func (s recvTimeout) Value() int64 {
+	d := s.CDeadline
+	req := d.basic.Request
+	return int64(req.Deadline)
+}
+func (s recvTimeout) Index() int {
+	d := s.CDeadline
+	return int(d.recv)
+}
+func (s recvTimeout) SetIndex(i int) {
+	d := s.CDeadline
+	d.recv = uint32(i)
+}
+
+func (s recvTimeout) Expire() {
+	d := s.CDeadline
+	d.recvExpired()
 }
