@@ -40,7 +40,7 @@ func (r *Request) Cancel() {
 type RequestRow struct {
 	used util.Atomic
 	freed util.Atomic
-	reqs  [256]Request
+	reqs  [16]Request
 }
 
 type reqMap map[util.Atomic]*RequestRow
@@ -59,7 +59,7 @@ func (h *RequestHolder) getNext(conn *Connection) *Request {
 		var reqs *RequestRow
 		var ok bool
 		id := h.curId.Incr()
-		big := id>>8
+		big := id>>4
 		if reqs, ok = h.reqs[big]; !ok {
 			h.RUnlock()
 			h.Lock()
@@ -71,7 +71,7 @@ func (h *RequestHolder) getNext(conn *Connection) *Request {
 			h.RLock()
 		}
 		if id != 0 && id != util.Atomic(iproto.PingRequestId) {
-			req := &reqs.reqs[id&0xff]
+			req := &reqs.reqs[id&0xf]
 			if req.conn != nil {
 				continue
 			}
@@ -88,11 +88,11 @@ func (h *RequestHolder) get(id uint32) *Request {
 	defer h.RUnlock()
 	var reqs *RequestRow
 	var ok bool
-	big := util.Atomic(id>>8)
+	big := util.Atomic(id>>4)
 	if reqs, ok = h.reqs[big]; !ok {
 		log.Panicf("Map has no RequestRow for %d", id)
 	}
-	return &reqs.reqs[id&0xff]
+	return &reqs.reqs[id&0xf]
 }
 
 func (h *RequestHolder) putBack(r *Request) {
@@ -101,14 +101,14 @@ func (h *RequestHolder) putBack(r *Request) {
 	if r.fakeId != 0 {
 		var reqs *RequestRow
 		var ok bool
-		big := util.Atomic(r.fakeId>>8)
+		big := util.Atomic(r.fakeId>>4)
 		if reqs, ok = h.reqs[big]; !ok {
 			log.Panicf("Map has no RequestRow for %d", r.fakeId)
 		}
-		reqs.reqs[r.fakeId&0xff] = Request{}
+		reqs.reqs[r.fakeId&0xf] = Request{}
 		border := big == 0 || big == util.Atomic(iproto.PingRequestId>>8)
 		freed := reqs.freed.Incr()
-		if freed == 256 || (freed == 255 && border) {
+		if freed == 16 || (freed == 15 && border) {
 			h.RUnlock()
 			h.Lock()
 			delete(h.reqs, big)
