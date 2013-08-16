@@ -13,7 +13,7 @@ var _ = log.Print
 type CDeadline struct {
 	basic BasicResponder
 	state util.Atomic
-	heap, send, recv int32
+	heap, send, recv uint32
 }
 
 var heaps = make([]CHeap, runtime.GOMAXPROCS(-1))
@@ -49,7 +49,7 @@ func (d *CDeadline) Wrap(r *Request) {
 		return
 	}
 
-	d.heap = int32(int(heapsI.Incr()) % len(heaps))
+	d.heap = uint32(int(heapsI.Incr()) % len(heaps))
 	heaps[d.heap].Insert(sendTimeout{d})
 	heaps[d.heap].Insert(recvTimeout{d})
 }
@@ -101,8 +101,8 @@ func (d *CDeadline) Cancel() {
 
 type timeout interface {
 	epoch() Epoch
-	index() int32
-	setIndex(int32)
+	index() int
+	setIndex(int)
 	expire()
 }
 
@@ -113,18 +113,15 @@ type sendTimeout struct {
 func (s sendTimeout) epoch() Epoch {
 	d := s.CDeadline
 	req := d.basic.Request
-	if req == nil {
-		return 0
-	}
 	return req.Deadline - Epoch(req.WorkTime)
 }
-func (s sendTimeout) index() int32 {
+func (s sendTimeout) index() int {
 	d := s.CDeadline
-	return d.send - 1
+	return int(d.send)
 }
-func (s sendTimeout) setIndex(i int32) {
+func (s sendTimeout) setIndex(i int) {
 	d := s.CDeadline
-	d.send = i + 1
+	d.send = uint32(i)
 }
 
 func (s sendTimeout) expire() {
@@ -139,18 +136,15 @@ type recvTimeout struct {
 func (s recvTimeout) epoch() Epoch {
 	d := s.CDeadline
 	req := d.basic.Request
-	if req == nil {
-		return 0
-	}
 	return req.Deadline
 }
-func (s recvTimeout) index() int32 {
+func (s recvTimeout) index() int {
 	d := s.CDeadline
-	return d.recv - 1
+	return int(d.recv)
 }
-func (s recvTimeout) setIndex(i int32) {
+func (s recvTimeout) setIndex(i int) {
 	d := s.CDeadline
-	d.recv = i + 1
+	d.recv = uint32(i)
 }
 
 func (s recvTimeout) expire() {
@@ -166,25 +160,29 @@ type heapItem struct {
 }
 type CHeap struct {
 	sync.Mutex
-	heap [][]heapItem
-	size int32
+	heap []*[256]heapItem
+	size int
 	changed chan bool
 }
 
 func (h *CHeap) Init() {
-	h.heap = make([][]heapItem, 1)
-	h.heap[0] = make([]heapItem, 256)
+	h.heap = make([]*[256]heapItem, 1)
+	h.heap[0] = &[256]heapItem{}
 	h.changed = make(chan bool, 1)
+	h.size = 3 // fake start index for compacter items layout
 	go h.Loop()
 }
 
 func (h *CHeap) Insert(t timeout) {
-	if t.index() != -1 {
-		panic("timeout insert: tm.index() != -1")
+	if t.index() != 0 {
+		panic("timeout insert: tm.index() != 0")
 	}
+
 	h.Lock()
 	defer h.Unlock()
+
 	h.insert(t)
+
 	select {
 	case h.changed<- true:
 	default:
@@ -192,12 +190,15 @@ func (h *CHeap) Insert(t timeout) {
 }
 
 func (h *CHeap) Remove(t timeout) {
-	if t.index() == -1 {
+	if t.index() == 0 {
 		return
 	}
+
 	h.Lock()
 	defer h.Unlock()
+
 	h.remove(t)
+
 	select {
 	case h.changed<- true:
 	default:
@@ -223,8 +224,8 @@ func (h *CHeap) checkExpired() Epoch {
 	now := NowEpoch()
 	h.Lock()
 	defer h.Unlock()
-	for h.size > 0 {
-		t := h.heap[0][0]
+	for h.size > 3 {
+		t := h.heap[0][3]
 		if t.Sub(now) >= 0 {
 			break
 		}
@@ -233,15 +234,15 @@ func (h *CHeap) checkExpired() Epoch {
 		t.expire()
 		h.Lock()
 	}
-	if h.size > 0 {
-		return h.heap[0][0].Epoch
+	if h.size > 3 {
+		return h.heap[0][3].Epoch
 	}
 	return now.Add(time.Hour)
 }
 
 func (h *CHeap) insert(tm timeout) {
-	if h.size & 0xff == 0 {
-		h.heap = append(h.heap, make([]heapItem, 256))
+	if h.size & 0xff == 0 && h.size >> 8 == len(h.heap) {
+		h.heap = append(h.heap, &[256]heapItem{})
 	}
 	h.heap[h.size>>8][h.size&0xff] = heapItem{timeout: tm, Epoch: tm.epoch()}
 	i := h.size
@@ -250,74 +251,78 @@ func (h *CHeap) insert(tm timeout) {
 	h.up(i)
 }
 
-func (h *CHeap) get(i int32) heapItem {
+func (h *CHeap) get(i int) heapItem {
 	return h.heap[i>>8][i&0xff]
 }
 
-func (h *CHeap) getEpoch(i int32) Epoch {
+func (h *CHeap) getEpoch(i int) Epoch {
 	return h.heap[i>>8][i&0xff].Epoch
 }
 
-func (h *CHeap) set(i int32, item heapItem) {
-	h.heap[i>>8][i&0xff] = item
-	item.setIndex(i)
+func (h *CHeap) clear(i int) {
+	h.heap[i>>8][i&0xff] = heapItem{}
 }
 
-func (h *CHeap) move(from, to int32) {
+func (h *CHeap) set(i int, item heapItem) {
+	h.heap[i>>8][i&0xff] = item
+	if item.timeout != nil {
+		item.setIndex(i)
+	}
+}
+
+func (h *CHeap) move(from, to int) {
 	item := h.heap[from>>8][from&0xff]
 	h.heap[to>>8][to&0xff] = item
 	item.setIndex(to)
 }
 
+func (h *CHeap) chomp() {
+	chunks := ((h.size-1) >> 8) + 1
+	if chunks + 1 < len(h.heap) {
+		h.heap[len(h.heap)-1] = nil
+		h.heap = h.heap[:chunks+1]
+	} else {
+		h.heap[h.size>>8][h.size&0xff] = heapItem{}
+	}
+}
+
 func (h *CHeap) remove(tm timeout) {
 	i := tm.index()
-	tm.setIndex(-1)
-	l := h.size - 1
+	tm.setIndex(0)
+	h.size--
+	l := h.size
 	if i != l {
 		h.move(l, i)
-		h.size--
 		h.down(i)
 		h.up(i)
-	} else {
-		h.size--
 	}
-	if h.size>>8 > 0 && h.size>>8 < int32(len(h.heap)) {
-		h.heap[len(h.heap)] = nil
-		h.heap = h.heap[:len(h.heap)-1]
-	} else {
-		h.set(h.size, heapItem{})
-	}
+	h.chomp()
 }
 
 func (h *CHeap) pop() {
-	l := h.size - 1
-	h.heap[0][0].setIndex(-1)
-	if l > 0 {
-		h.move(l, 0)
-		h.size--
-		h.down(0)
+	h.size--
+	l := h.size
+	h.heap[0][3].setIndex(0)
+	if l > 3 {
+		h.move(l, 3)
+		h.down(3)
 	} else {
 		h.size--
 	}
-	if h.size>>8 > 0 && h.size>>8 < int32(len(h.heap)) {
-		h.heap[len(h.heap)] = nil
-		h.heap = h.heap[:len(h.heap)-1]
-	} else {
-		h.set(h.size, heapItem{})
-	}
+	h.chomp()
 }
 
-func (h *CHeap) up(j int32) {
+func (h *CHeap) up(j int) {
 	item := h.get(j)
-	i := (j - 1) / 4
-	if i == j || h.getEpoch(i) < item.Epoch {
+	i := j / 4 + 2
+	if i == 2 || h.getEpoch(i) < item.Epoch {
 		return
 	}
 	h.move(i, j)
 	j = i
 
 	for {
-		i = (j - 1) / 4
+		i = j / 4 + 2
 		if i == j || h.getEpoch(i) < item.Epoch {
 			break
 		}
@@ -328,9 +333,11 @@ func (h *CHeap) up(j int32) {
 	item.setIndex(j)
 }
 
-func (h *CHeap) down(j int32) {
-	var i int32
+func (h *CHeap) down(j int) {
+	var i int
+
 	item := h.get(j)
+
 	if i = h.downIndex(j, item.Epoch); i == j {
 		return
 	}
@@ -349,21 +356,23 @@ func (h *CHeap) down(j int32) {
 	item.setIndex(j)
 }
 
-func (h *CHeap) downIndex(j int32, e Epoch) int32 {
+func (h *CHeap) downIndex(j int, e Epoch) int {
 	last := h.size - 1
-	if j > (last-1) / 4 {
+	if j > last / 4 + 2 {
 		return j
 	}
-	var j2 int32
+	var j2 int
 	var e1, e2 Epoch
-	i1 := j * 4 + 1
-	i2 := i1+1
-	
+
+	i1 := (j - 2) * 4
+	i2 := i1 + 1
+
 	e1 = h.getEpoch(i1)
 	if e1 < e {
 		j = i1
 		e = e1
 	}
+
 	if i2 <= last {
 		if i2+1 <= last {
 			e21, e22 := h.getEpoch(i2), h.getEpoch(i2+1)
@@ -385,4 +394,3 @@ func (h *CHeap) downIndex(j int32, e Epoch) int32 {
 	}
 	return j
 }
-
