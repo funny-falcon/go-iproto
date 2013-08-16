@@ -52,23 +52,22 @@ type RequestHolder struct {
 }
 
 func (h *RequestHolder) getNext(conn *Connection) *Request {
-	h.RLock()
-	defer h.RUnlock()
 	h.count.Incr()
 	for {
 		var reqs *RequestRow
 		var ok bool
 		id := h.curId.Incr()
 		big := id>>4
-		if reqs, ok = h.reqs[big]; !ok {
-			h.RUnlock()
+		h.RLock()
+		reqs, ok = h.reqs[big]
+		h.RUnlock()
+		if !ok {
 			h.Lock()
 			if reqs, ok = h.reqs[big]; !ok {
 				reqs = &RequestRow{}
 				h.reqs[big] = reqs
 			}
 			h.Unlock()
-			h.RLock()
 		}
 		if id != 0 && id != util.Atomic(iproto.PingRequestId) {
 			req := &reqs.reqs[id&0xf]
@@ -96,24 +95,22 @@ func (h *RequestHolder) get(id uint32) *Request {
 }
 
 func (h *RequestHolder) putBack(r *Request) {
-	h.RLock()
-	defer h.RUnlock()
 	if r.fakeId != 0 {
 		var reqs *RequestRow
 		var ok bool
 		big := util.Atomic(r.fakeId>>4)
+		h.RLock()
 		if reqs, ok = h.reqs[big]; !ok {
 			log.Panicf("Map has no RequestRow for %d", r.fakeId)
 		}
+		h.RUnlock()
 		reqs.reqs[r.fakeId&0xf] = Request{}
 		border := big == 0 || big == util.Atomic(iproto.PingRequestId>>8)
 		freed := reqs.freed.Incr()
 		if freed == 16 || (freed == 15 && border) {
-			h.RUnlock()
 			h.Lock()
 			delete(h.reqs, big)
 			h.Unlock()
-			h.RLock()
 		}
 		h.count.Decr()
 	}
