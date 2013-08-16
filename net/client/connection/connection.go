@@ -3,7 +3,7 @@ package connection
 import (
 	"bufio"
 	"github.com/funny-falcon/go-iproto"
-	nt "github.com/funny-falcon/go-iproto/net_timeout"
+	nt "github.com/funny-falcon/go-iproto/net"
 	"io"
 	"log"
 	"net"
@@ -230,8 +230,8 @@ func (conn *Connection) notifyLoop(action notifyAction) {
 }
 
 func (conn *Connection) readLoop() {
-	var res iproto.Response
-	var header iproto.Header
+	var res nt.Response
+	var header nt.HeaderIO
 	header.Init()
 
 	defer conn.notifyLoop(readClosed)
@@ -259,7 +259,7 @@ func (conn *Connection) readLoop() {
 		conn.Unlock()
 
 		if ireq := req.Request; ireq != nil {
-			ireq.Response(res)
+			ireq.Response(iproto.Response(res))
 		}
 
 		conn.Lock()
@@ -272,7 +272,7 @@ const fakePingInterval = 1 * time.Hour
 
 func (conn *Connection) writeLoop() {
 	var err error
-	var header iproto.Header
+	var header nt.HeaderIO
 	var pingTicker *time.Ticker
 
 
@@ -303,7 +303,7 @@ Loop:
 		var request *iproto.Request
 		var req *Request
 		var okRequest, ping bool
-		var requestHeader iproto.RequestHeader
+		var requestHeader nt.Request
 
 		conn.writeTimeout.Reset(conn.conn)
 
@@ -329,7 +329,7 @@ Loop:
 		}
 
 		if ping {
-			requestHeader = iproto.RequestHeader{
+			requestHeader = nt.Request{
 				Msg:  iproto.Ping,
 				Body: make([]byte, 0),
 				Id:   iproto.PingRequestId,
@@ -341,7 +341,7 @@ Loop:
 			if req = conn.putInFly(request); req == nil {
 				continue
 			}
-			requestHeader = iproto.RequestHeader{
+			requestHeader = nt.Request{
 				Msg: request.Msg,
 				Id: req.fakeId,
 				Body: request.Body,

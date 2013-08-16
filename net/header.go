@@ -1,12 +1,23 @@
-package iproto
+package net
 
-import "io"
-import "encoding/binary"
-import "log"
+import (
+	"github.com/funny-falcon/go-iproto"
+	"io"
+	"encoding/binary"
+	"log"
+)
 
 var bin_le = binary.LittleEndian
 
-type Header struct {
+type Request struct {
+	Msg      iproto.RequestType
+	Body     []byte
+	Id       uint32
+}
+
+type Response iproto.Response
+
+type HeaderIO struct {
 	buf                     [16]byte
 	bodybuf                 []byte
 }
@@ -15,18 +26,18 @@ const (
 	bodybufSize = 1*1024
 )
 
-func (h *Header) Init() {
+func (h *HeaderIO) Init() {
 	h.bodybuf = make([]byte, bodybufSize)
 }
 
-func (h *Header) ReadRequest(r io.Reader) (req RequestHeader, err error) {
+func (h *HeaderIO) ReadRequest(r io.Reader) (req Request, err error) {
 	if _, err := io.ReadFull(r, h.buf[:12]); err != nil {
-		return RequestHeader{}, err
+		return Request{}, err
 	}
 
 	body_len := bin_le.Uint32(h.buf[4:8])
-	req = RequestHeader{
-		Msg:  RequestType(bin_le.Uint32(h.buf[:4])),
+	req = Request{
+		Msg:  iproto.RequestType(bin_le.Uint32(h.buf[:4])),
 		Body: make([]byte, body_len),
 		Id:   bin_le.Uint32(h.buf[8:12]),
 	}
@@ -40,24 +51,24 @@ type readbyter interface {
 	ReadByte() (c byte, err error)
 }
 
-func (h *Header) ReadResponse(r io.Reader, retCodeLen int) (res Response, err error) {
-	var code RetCode
+func (h *HeaderIO) ReadResponse(r io.Reader, retCodeLen int) (res Response, err error) {
+	var code iproto.RetCode
 
 	if _, err := io.ReadFull(r, h.buf[:12]); err != nil {
 		return Response{}, err
 	}
 
-	msg := RequestType(bin_le.Uint32(h.buf[:4]))
+	msg := iproto.RequestType(bin_le.Uint32(h.buf[:4]))
 	body_len := bin_le.Uint32(h.buf[4:8])
 
-	if msg != Ping {
+	if msg != iproto.Ping {
 		if body_len < uint32(retCodeLen) {
-			code = RcProtocolError
+			code = iproto.RcProtocolError
 		} else {
 			body_len -= uint32(retCodeLen)
 			switch retCodeLen {
 			case 0:
-				code = RcOK
+				code = iproto.RcOK
 			case 1:
 				var c byte
 				var err error
@@ -71,12 +82,12 @@ func (h *Header) ReadResponse(r io.Reader, retCodeLen int) (res Response, err er
 				if err != nil {
 					return Response{}, err
 				}
-				code = RetCode(c)
+				code = iproto.RetCode(c)
 			case 4:
 				if _, err = io.ReadFull(r, h.buf[12:16]); err != nil {
 					return Response{}, err
 				}
-				code = RetCode(bin_le.Uint32(h.buf[12:16]))
+				code = iproto.RetCode(bin_le.Uint32(h.buf[12:16]))
 			}
 		}
 	}
@@ -106,7 +117,7 @@ func (h *Header) ReadResponse(r io.Reader, retCodeLen int) (res Response, err er
 	return
 }
 
-func (h *Header) WriteRequest(w io.Writer, req RequestHeader) (err error) {
+func (h *HeaderIO) WriteRequest(w io.Writer, req Request) (err error) {
 	bin_le.PutUint32(h.buf[:4], uint32(req.Msg))
 	bin_le.PutUint32(h.buf[4:8], uint32(len(req.Body)))
 	bin_le.PutUint32(h.buf[8:12], req.Id)
@@ -121,7 +132,7 @@ func (h *Header) WriteRequest(w io.Writer, req RequestHeader) (err error) {
 	return
 }
 
-func (h *Header) WriteResponse(w io.Writer, res *Response, retCodeLen int) (err error) {
+func (h *HeaderIO) WriteResponse(w io.Writer, res *Response, retCodeLen int) (err error) {
 	var head []byte
 	body_len := uint32(len(res.Body) + retCodeLen)
 	bin_le.PutUint32(h.buf[:4], uint32(res.Msg))

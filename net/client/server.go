@@ -1,8 +1,8 @@
-package net_client
+package client
 
 import (
 	"github.com/funny-falcon/go-iproto"
-	"github.com/funny-falcon/go-iproto/net_client/connection"
+	"github.com/funny-falcon/go-iproto/net/client/connection"
 	"log"
 	"time"
 )

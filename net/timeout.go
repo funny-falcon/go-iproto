@@ -1,4 +1,4 @@
-package net_timeout
+package net
 
 import (
 	"log"

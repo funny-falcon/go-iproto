@@ -1,4 +1,4 @@
-package net_timeout
+package net
 
 type Kind uint8
 

@@ -17,17 +17,11 @@ const (
 	PingRequestId = ^uint32(0)
 )
 
-type RequestHeader struct {
-	Msg      RequestType
-	Body     []byte
-	Id       uint32
-}
-
 type Request struct {
 	Msg      RequestType
-	Body     []byte
 	Id       uint32
 	state    util.Atomic
+	Body     []byte
 	Responder Responder
 
 	Deadline     Epoch

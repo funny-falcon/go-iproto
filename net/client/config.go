@@ -1,4 +1,4 @@
-package net_client
+package client
 
 import (
 	"log"
