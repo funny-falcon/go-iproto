@@ -3,15 +3,15 @@ package iproto
 import (
 	"github.com/funny-falcon/go-iproto/util"
 	"log"
+	"time"
 )
 
 var _ = log.Print
 
-type CDeadline struct {
-	basic BasicResponder
+type Deadline struct {
+	BasicResponder
 	state util.Atomic
-	heap  heapRef
-	send, recv uint32
+	timer  *time.Timer
 }
 
 const (
@@ -20,24 +20,22 @@ const (
 	dsResponding
 )
 
-func wrapInCDeadline(r *Request) {
+func wrapInDeadline(r *Request) {
 	if r.Deadline.Zero() {
 		return
 	}
-	d := CDeadline{}
+	d := Deadline{}
 	d.Wrap(r)
 }
 
-func (d *CDeadline) Wrap(r *Request) {
+func (d *Deadline) Wrap(r *Request) {
 	if r.Deadline.Zero() {
 		return
 	}
 
 	r.canceled = make(chan bool, 1)
 
-	now := NowEpoch()
-	recvRemains := r.Deadline.Sub(now)
-	sendRemains := recvRemains - r.WorkTime
+	sendRemains := r.Deadline.Sub(NowEpoch()) - r.WorkTime
 	r.ChainResponder(d)
 
 	if sendRemains < 0 {
@@ -45,98 +43,56 @@ func (d *CDeadline) Wrap(r *Request) {
 		return
 	}
 
-	d.heap = getHeap()
-	d.heap.Insert(sendTimeout{d})
-	d.heap.Insert(recvTimeout{d})
+	d.timer = time.AfterFunc(sendRemains, d.sendExpired)
 }
 
-func (d *CDeadline) sendExpired() {
-	r := d.basic.Request
-	if r != nil && r.expireSend() {
-		d.state.Store(dsCanceling)
-		r.doCancel()
-		res := Response { Id: r.Id, Msg: r.Msg, Code: RcSendTimeout }
-		if prev := d.basic.Unchain(); prev != nil {
-			prev.Respond(res)
+func (d *Deadline) sendExpired() {
+	if r := d.Request; r != nil {
+		if r.expireSend() {
+			d.state.Store(dsCanceling)
+			r.doCancel()
+			res := Response { Id: r.Id, Msg: r.Msg, Code: RcSendTimeout }
+			if prev := d.Unchain(); prev != nil {
+				prev.Respond(res)
+			}
+		} else {
+			if r.WorkTime > 0 {
+				if recvRemains := r.Deadline.Sub(NowEpoch()); recvRemains > 0 {
+					d.timer = time.AfterFunc(recvRemains, d.recvExpired)
+				}
+			}
+			d.recvExpired()
 		}
 	}
 }
 
-func (d *CDeadline) recvExpired() {
-	r := d.basic.Request
-	if r != nil && r.goingToCancel() {
+func (d *Deadline) recvExpired() {
+	if r := d.Request; r != nil && r.goingToCancel() {
 		d.state.Store(dsCanceling)
 		r.doCancel()
 		res := Response { Id: r.Id, Msg: r.Msg, Code: RcRecvTimeout }
-		if prev := d.basic.Unchain(); prev != nil {
+		if prev := d.Unchain(); prev != nil {
 			prev.Respond(res)
 		}
 	}
 }
 
-func (d *CDeadline) Respond(res Response) {
-	d.state.Store(dsResponding)
-	d.heap.Remove(sendTimeout{d})
-	d.heap.Remove(recvTimeout{d})
-	prev := d.basic.Unchain()
-	if prev != nil {
-		prev.Respond(res)
+func (d *Deadline) Respond(res Response) {
+	if d.state.CAS(dsNil, dsResponding) {
+		d.timer.Stop()
+		prev := d.Unchain()
+		if prev != nil {
+			prev.Respond(res)
+		}
 	}
 }
 
-func (d *CDeadline) Cancel() {
-	d.heap.Remove(sendTimeout{d})
-	d.heap.Remove(recvTimeout{d})
+func (d *Deadline) Cancel() {
 	if !d.state.Is(dsCanceling) {
-		prev := d.basic.Unchain()
+		d.timer.Stop()
+		prev := d.Unchain()
 		if prev != nil {
 			prev.Cancel()
 		}
 	}
-}
-
-type sendTimeout struct {
-	*CDeadline
-}
-
-func (s sendTimeout) Value() int64 {
-	d := s.CDeadline
-	req := d.basic.Request
-	return int64(req.Deadline) - int64(req.WorkTime)
-}
-func (s sendTimeout) Index() int {
-	d := s.CDeadline
-	return int(d.send)
-}
-func (s sendTimeout) SetIndex(i int) {
-	d := s.CDeadline
-	d.send = uint32(i)
-}
-
-func (s sendTimeout) Expire() {
-	d := s.CDeadline
-	d.sendExpired()
-}
-
-type recvTimeout struct {
-	*CDeadline
-}
-
-func (s recvTimeout) Value() int64 {
-	d := s.CDeadline
-	req := d.basic.Request
-	return int64(req.Deadline)
-}
-func (s recvTimeout) Index() int {
-	d := s.CDeadline
-	return int(d.recv)
-}
-func (s recvTimeout) SetIndex(i int) {
-	d := s.CDeadline
-	d.recv = uint32(i)
-}
-
-func (s recvTimeout) Expire() {
-	d := s.CDeadline
-	d.recvExpired()
 }
