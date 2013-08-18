@@ -183,6 +183,10 @@ func (r *Request) ResponseIOError() (respondCalled bool) {
 	return true
 }
 
+func (r *Request) ChainResponder(res ChainingResponder) {
+	res.SetReq(r, res)
+}
+
 const (
 	rsNew = util.Atomic(iota)
 	rsPending

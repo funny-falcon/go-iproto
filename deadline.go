@@ -38,7 +38,7 @@ func (d *CDeadline) Wrap(r *Request) {
 	now := NowEpoch()
 	recvRemains := r.Deadline.Sub(now)
 	sendRemains := recvRemains - r.WorkTime
-	d.basic.Chain(r)
+	r.ChainResponder(d)
 
 	if sendRemains < 0 {
 		d.sendExpired()

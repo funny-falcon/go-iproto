@@ -41,16 +41,22 @@ type Responder interface {
 	Cancel()
 }
 
+type ChainingResponder interface {
+	Responder
+	SetReq(req *Request, self Responder)
+	Unchain() Responder
+}
+
 type BasicResponder struct {
 	Request *Request
 	prev Responder
 }
 
 // Chain integrates BasicResponder into callback chain
-func (r *BasicResponder) Chain(req *Request) {
+func (r *BasicResponder) SetReq(req *Request, self Responder) {
 	r.Request = req
 	r.prev = req.Responder
-	req.Responder = r
+	req.Responder = self
 }
 
 // Unchain removes BasicResponder from callback chain
@@ -60,9 +66,8 @@ func (r *BasicResponder) Unchain() (prev Responder) {
 		req.Responder = prev
 		r.prev = nil
 		r.Request = nil
-		return prev
 	}
-	return nil
+	return
 }
 
 func (r *BasicResponder) Respond(res Response) {

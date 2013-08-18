@@ -13,19 +13,10 @@ type Request struct {
 	fakeId uint32
 }
 
-func wrapRequest(conn *Connection, ireq *iproto.Request, id uint32) *Request {
-	req := &Request {
-		conn: conn,
-		fakeId: id,
-	}
-	req.Chain(ireq)
-	return req
-}
-
 func (r *Request) Respond(res iproto.Response) {
+	res.Id = r.Request.Id
 	prev := r.Unchain()
 	if prev != nil {
-		res.Id = r.Request.Id
 		prev.Respond(res)
 	}
 }
@@ -110,7 +101,7 @@ func (h *RequestHolder) putBack(r *Request) {
 			log.Panicf("Map has no RequestRow for %d", r.fakeId)
 		}
 		h.RUnlock()
-		reqs.reqs[r.fakeId&rowMask] = Request{}
+		reqs.reqs[r.fakeId&rowMask].Unchain()
 		border := big == 0 || big == util.Atomic(iproto.PingRequestId>>8)
 		freed := reqs.freed.Incr()
 		if freed == rowN || (freed == rowN1 && border) {
