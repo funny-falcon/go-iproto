@@ -9,7 +9,6 @@ import (
 
 type Request struct {
 	iproto.BasicResponder
-	conn *Connection
 	fakeId uint32
 }
 
@@ -68,10 +67,9 @@ func (h *RequestHolder) getNext(conn *Connection) *Request {
 		}
 		if id != 0 && id != util.Atomic(iproto.PingRequestId) {
 			req := &reqs.reqs[id&rowMask]
-			if req.conn != nil {
+			if req.fakeId != 0 {
 				continue
 			}
-			req.conn = conn
 			req.fakeId = uint32(id)
 			reqs.used.Incr()
 			return req
@@ -120,7 +118,7 @@ func (h *RequestHolder) getAll() (reqs []*iproto.Request) {
 	i := 0
 	for _, row := range h.reqs {
 		for _, req := range row.reqs {
-			if req.conn != nil {
+			if req.fakeId != 0 {
 				reqs[i] = req.Request
 				i++
 			}
