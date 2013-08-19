@@ -13,6 +13,7 @@ const (
 	RcOK          = RetCode(0)
 	RcShutdown = ^RetCode(0) - iota
 	RcProtocolError
+	RcFailed
 	RcFatalError = RcShutdown - 255 - iota
 	RcSendTimeout
 	RcRecvTimeout
