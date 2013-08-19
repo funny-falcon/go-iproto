@@ -90,6 +90,7 @@ func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 		writeTimeout: nt.Timeout{Timeout: conf.WriteTimeout, Kind: nt.Write},
 
 		loopNotify: make(chan notifyAction, 2),
+		State: CsNew,
 	}
 	conn.SimplePoint.Init()
 	return
@@ -105,6 +106,7 @@ func (conn *Connection) Run(ch chan *iproto.Request, standalone bool) {
 
 func (conn *Connection) dial() {
 	dialer := net.Dialer{Timeout: DialTimeout}
+	conn.State = CsDialing
 	if netconn, err := dialer.Dial(conn.Network, conn.Address); err != nil {
 		conn.ConnErr <- Error{conn, Dial, err}
 		conn.State = CsClosed
@@ -159,8 +161,10 @@ func (conn *Connection) controlLoop() {
 		action := <-conn.loopNotify
 		switch action {
 		case writeClosed:
+			conn.State &^= CsClosed
 			conn.State |= CsWriteClosed
 		case readClosed:
+			conn.State &^= CsClosed
 			conn.State |= CsReadClosed
 			if conn.State & CsWriteClosed == 0 {
 				conn.Stop()
@@ -283,6 +287,7 @@ Loop:
 
 		select {
 		case <-conn.ExitChan():
+			conn.shutdown = true
 		case request, okRequest = <-conn.ReceiveChan():
 		default:
 			if err = write.Flush(); err != nil {
@@ -294,6 +299,7 @@ Loop:
 				ping, okRequest = true, true
 			case request, okRequest = <-conn.ReceiveChan():
 			case <-conn.ExitChan():
+				conn.shutdown = true
 			}
 			conn.writeTimeout.UnFreeze(conn.conn)
 		}
