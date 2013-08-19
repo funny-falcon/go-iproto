@@ -113,5 +113,6 @@ func (h *RequestHolder) getAll() (reqs []*Request) {
 			}
 		}
 	}
+	reqs = reqs[:i]
 	return
 }

@@ -201,9 +201,11 @@ func (conn *Connection) flushInFly() {
 		resp.Code = iproto.RcShutdown
 	}
 	for _, req := range reqs {
-		resp.Msg = req.Request.Msg
-		resp.Id = req.fakeId
-		req.Request.Response(resp, req)
+		if request := req.Request; request != nil {
+			resp.Msg = request.Msg
+			resp.Id = req.fakeId
+			request.Response(resp, req)
+		}
 	}
 }
 
