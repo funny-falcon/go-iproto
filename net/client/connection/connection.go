@@ -170,12 +170,12 @@ func (conn *Connection) controlLoop() {
 			}
 		}
 
-		if conn.State & CsWriteClosed == 0 {
+		if conn.State & CsWriteClosed != 0 {
 			if !closeReadCalled && conn.inFly.count.Get() == 0 {
 				conn.conn.CloseRead()
 				closeReadCalled = true
 			}
-			if conn.State & CsReadClosed == 0 {
+			if conn.State & CsReadClosed != 0 {
 				break
 			}
 		}
