@@ -268,8 +268,10 @@ func (conn *Connection) writeLoop() {
 	defer func() {
 		conn.writeTimeout.Freeze(nil)
 		pingTicker.Stop()
-		if err = write.Flush(); err == nil {
-			conn.conn.CloseWrite()
+		if err == nil {
+			if err = write.Flush(); err == nil {
+				conn.conn.CloseWrite()
+			}
 		}
 		conn.notifyLoop(writeClosed)
 		conn.ConnErr <- Error{conn, Write, err}
@@ -282,7 +284,7 @@ Loop:
 	for {
 		var request *iproto.Request
 		var req *Request
-		var okRequest, ping bool
+		var ping bool
 		var requestHeader nt.Request
 
 		conn.writeTimeout.Reset(conn.conn)
@@ -290,7 +292,15 @@ Loop:
 		select {
 		case <-conn.ExitChan():
 			conn.shutdown = true
-		case request, okRequest = <-conn.ReceiveChan():
+			break Loop
+		default:
+		}
+
+		select {
+		case <-conn.ExitChan():
+			conn.shutdown = true
+			break Loop
+		case request = <-conn.ReceiveChan():
 		default:
 			if err = write.Flush(); err != nil {
 				break Loop
@@ -298,16 +308,13 @@ Loop:
 			conn.writeTimeout.Freeze(conn.conn)
 			select {
 			case <-pingTicker.C:
-				ping, okRequest = true, true
-			case request, okRequest = <-conn.ReceiveChan():
+				ping = true
+			case request = <-conn.ReceiveChan():
 			case <-conn.ExitChan():
 				conn.shutdown = true
+				break Loop
 			}
 			conn.writeTimeout.UnFreeze(conn.conn)
-		}
-
-		if !okRequest {
-			break
 		}
 
 		if ping {
