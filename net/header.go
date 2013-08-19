@@ -30,6 +30,19 @@ func (h *HeaderIO) Init() {
 	h.bodybuf = make([]byte, bodybufSize)
 }
 
+func (h *HeaderIO) body(body_len uint32) (body []byte) {
+	if body_len < 128 {
+		if body_len > uint32(len(h.bodybuf)) {
+			h.bodybuf = make([]byte, bodybufSize)
+		}
+		body = h.bodybuf[:body_len]
+		h.bodybuf = h.bodybuf[body_len:]
+	} else {
+		body = make([]byte, body_len)
+	}
+	return
+}
+
 func (h *HeaderIO) ReadRequest(r io.Reader) (req Request, err error) {
 	if _, err := io.ReadFull(r, h.buf[:12]); err != nil {
 		return Request{}, err
@@ -38,7 +51,7 @@ func (h *HeaderIO) ReadRequest(r io.Reader) (req Request, err error) {
 	body_len := bin_le.Uint32(h.buf[4:8])
 	req = Request{
 		Msg:  iproto.RequestType(bin_le.Uint32(h.buf[:4])),
-		Body: make([]byte, body_len),
+		Body: h.body(body_len),
 		Id:   bin_le.Uint32(h.buf[8:12]),
 	}
 
@@ -92,20 +105,9 @@ func (h *HeaderIO) ReadResponse(r io.Reader, retCodeLen int) (res Response, err 
 		}
 	}
 
-	var body []byte
-	if body_len < 128 {
-		if body_len > uint32(len(h.bodybuf)) {
-			h.bodybuf = make([]byte, bodybufSize)
-		}
-		body = h.bodybuf[:body_len]
-		h.bodybuf = h.bodybuf[body_len:]
-	} else {
-		body = make([]byte, body_len)
-	}
-
 	res = Response{
 		Msg:  msg,
-		Body: body,
+		Body: h.body(body_len),
 		Code: code,
 		Id:   bin_le.Uint32(h.buf[8:12]),
 	}
