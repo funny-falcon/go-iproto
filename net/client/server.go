@@ -45,6 +45,8 @@ type Server struct {
 	connErr     chan connection.Error
 	actions     chan action
 	exiting     bool
+
+	reconnecter *time.Ticker
 }
 
 var _ iproto.EndPoint = (*Server)(nil)
@@ -85,12 +87,12 @@ func (cfg *ServerConf) NewServer() (serv *Server) {
 func (serv *Server) Run(ch chan *iproto.Request, standalone bool) {
 	serv.SetChan(ch, standalone)
 	serv.needConns = serv.Connections
-	serv.fixConnections()
+	serv.reconnecter = time.NewTicker(time.Second / 5)
 	go serv.Loop()
 }
 
 func (serv *Server) fixConnections() {
-	needConn := serv.needConns - serv.dialing + serv.established
+	needConn := serv.needConns - (serv.dialing + serv.established)
 	for ; needConn > 0; needConn-- {
 		serv.curId++
 		conn := connection.NewConnection(&serv.CConf, serv.curId)
@@ -127,14 +129,16 @@ func (serv *Server) Loop() {
 		case <-serv.ExitChan():
 			serv.needConns = 0
 			serv.exiting = true
-			break
 		case connErr := <-serv.connErr:
 			serv.onConnError(connErr)
 		case action := <-serv.actions:
 			serv.onAction(action)
+		case <-serv.reconnecter.C:
+			serv.fixConnections()
 		}
 
 		if serv.exiting && serv.established + serv.dialing == 0 {
+			serv.reconnecter.Stop()
 			break
 		}
 	}
@@ -145,7 +149,6 @@ func (serv *Server) onAction(action action) {
 	case setServ:
 		serv.Connections = action.servs
 		serv.needConns = action.servs
-		serv.fixConnections()
 	case setReadTimeout:
 		serv.ReadTimeout = action.timeout
 		for _, conn := range serv.connections  {
@@ -173,13 +176,11 @@ func (serv *Server) onConnError(connErr connection.Error) {
 				log.Panicf("Unknown connection failed %+v", conn)
 			}
 			delete(serv.connections, conn.Id)
-			serv.fixConnections()
 		}
 	case connection.Write:
 		log.Printf("%s: write side closed %v -> %v", serv.conf.Name, conn.LocalAddr(), conn.RemoteAddr())
 		serv.established--
 		serv.dying++
-		serv.fixConnections()
 	case connection.Read:
 		log.Printf("%s: read side closed %v -> %v", serv.conf.Name, conn.LocalAddr(), conn.RemoteAddr())
 		serv.dying--
@@ -187,7 +188,6 @@ func (serv *Server) onConnError(connErr connection.Error) {
 			log.Panicf("Unknown connection failed %+v", conn)
 		}
 		delete(serv.connections, conn.Id)
-		serv.fixConnections()
 	}
 }
 
