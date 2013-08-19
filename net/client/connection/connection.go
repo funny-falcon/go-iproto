@@ -62,7 +62,7 @@ type Connection struct {
 	sync.Mutex
 	*CConf
 
-	conn NetConn
+	conn nt.NetConn
 
 	closeWrite   chan bool
 	readErr      error
@@ -112,7 +112,7 @@ func (conn *Connection) dial() {
 		conn.ConnErr <- Error{conn, Dial, err}
 		conn.State = CsClosed
 	} else {
-		conn.conn = netconn.(NetConn)
+		conn.conn = netconn.(nt.NetConn)
 		conn.ConnErr <- Error{conn, Dial, nil}
 		conn.State = CsConnected
 		go conn.readLoop()
@@ -124,10 +124,10 @@ func (conn *Connection) dial() {
 /* RunWithConn is for testing purposes */
 func (conn *Connection) RunWithConn(netconn io.ReadWriteCloser) {
 	switch nc := netconn.(type) {
-	case NetConn:
+	case nt.NetConn:
 		conn.conn = nc
 	default:
-		conn.conn = rwcWrapper{ReadWriteCloser: netconn}
+		conn.conn = nt.RwcWrapper{ReadWriteCloser: netconn}
 	}
 	conn.ConnErr <- Error{conn, Dial, nil}
 	go conn.readLoop()

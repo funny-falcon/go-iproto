@@ -1,4 +1,4 @@
-package connection
+package net
 
 import (
 	"io"
@@ -15,32 +15,32 @@ type NetConn interface {
 	RemoteAddr() net.Addr
 }
 
-type rwcWrapper struct {
+type RwcWrapper struct {
 	io.ReadWriteCloser
 }
 
-func (r rwcWrapper) CloseWrite() error {
+func (r RwcWrapper) CloseWrite() error {
 	return r.Close()
 }
 
-func (r rwcWrapper) CloseRead() error {
+func (r RwcWrapper) CloseRead() error {
 	return r.Close()
 }
 
-type rwcWrapperAddress bool
+type RwcWrapperAddress bool
 
-func (r rwcWrapperAddress) Network() string {
+func (r RwcWrapperAddress) Network() string {
 	return "virtual"
 }
 
-func (r rwcWrapperAddress) Address() string {
+func (r RwcWrapperAddress) Address() string {
 	return "wrapper"
 }
 
-func (r rwcWrapper) LocalAddr() (addr net.Addr) {
+func (r RwcWrapper) LocalAddr() (addr net.Addr) {
 	return
 }
 
-func (r rwcWrapper) RemoteAddr() (addr net.Addr) {
+func (r RwcWrapper) RemoteAddr() (addr net.Addr) {
 	return
 }
