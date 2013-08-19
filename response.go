@@ -38,50 +38,45 @@ func (res *Response) Restartable() bool {
 
 type Responder interface {
 	Respond(Response)
-	Cancel()
 }
 
-type ChainingResponder interface {
-	Responder
-	SetReq(req *Request, self Responder)
-	Unchain() Responder
+type Middleware interface {
+	Respond(*Response)
+	Cancel()
+	valid() bool
+	setReq(req *Request, self Middleware)
+	unchain() Middleware
 }
 
 type BasicResponder struct {
 	Request *Request
-	prev Responder
+	prev Middleware
 }
 
 // Chain integrates BasicResponder into callback chain
-func (r *BasicResponder) SetReq(req *Request, self Responder) {
+func (r *BasicResponder) setReq(req *Request, self Middleware) {
 	r.Request = req
-	r.prev = req.Responder
-	req.Responder = self
+	r.prev = req.chain
+	req.chain = self
 }
 
 // Unchain removes BasicResponder from callback chain
-func (r *BasicResponder) Unchain() (prev Responder) {
-	if req := r.Request; req != nil {
-		prev = r.prev
-		req.Responder = prev
-		r.prev = nil
-		r.Request = nil
-	}
+func (r *BasicResponder) unchain() (prev Middleware) {
+	prev = r.prev
+	r.Request.chain = prev
+	r.prev = nil
+	r.Request = nil
 	return
 }
 
-func (r *BasicResponder) Respond(res Response) {
-	prev := r.Unchain()
-	if prev != nil {
-		prev.Respond(res)
-	}
+func (r *BasicResponder) valid() bool {
+	return r.Request != nil
+}
+
+func (r *BasicResponder) Respond(*Response) {
 }
 
 func (r *BasicResponder) Cancel() {
-	prev := r.Unchain()
-	if prev != nil {
-		prev.Cancel()
-	}
 }
 
 type Callback struct {

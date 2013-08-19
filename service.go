@@ -93,7 +93,3 @@ func (s *SimplePoint) Run(ch chan *Request) {
 func (s *SimplePoint) Stop() {
 	s.exit <- true
 }
-
-func (s *SimplePoint) doSomethingUseful(req *Request) {
-	req.ResponseIOError()
-}

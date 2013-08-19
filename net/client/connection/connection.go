@@ -200,8 +200,9 @@ func (conn *Connection) flushInFly() {
 		resp.Code = iproto.RcShutdown
 	}
 	for _, req := range reqs {
-		resp.Msg = req.Msg
-		req.Response(resp)
+		resp.Msg = req.Request.Msg
+		resp.Id = req.fakeId
+		req.Request.Response(resp, req)
 	}
 }
 
@@ -237,7 +238,7 @@ func (conn *Connection) readLoop() {
 		}
 
 		if ireq := req.Request; ireq != nil {
-			ireq.Response(iproto.Response(res))
+			ireq.Response(iproto.Response(res), req)
 		}
 
 		conn.inFly.putBack(req)

@@ -1,12 +1,12 @@
 package iproto
 
 import (
-	"github.com/funny-falcon/go-iproto/util"
 	"log"
 	"time"
+	"sync"
 )
 
-// RequestType is a iproto request tag which goes first in a packet
+// RequestType is a iproto request tag which goes fiRst in a packet
 type RequestType uint32
 
 const (
@@ -20,9 +20,10 @@ const (
 type Request struct {
 	Msg      RequestType
 	Id       uint32
-	state    util.Atomic
+	state    uint32
 	Body     []byte
 	Responder Responder
+	chain    Middleware
 
 	Deadline     Epoch
 	/* WorkTime is a hint to EndPoint, will Deadline be reached if we send request now.
@@ -30,6 +31,7 @@ type Request struct {
 	   than it will not try to send Request to network */
 	WorkTime time.Duration
 
+	sync.Mutex
 	canceled  chan bool
 }
 
@@ -67,70 +69,57 @@ func (r *Request) CancelChan() <-chan bool {
 	return r.canceled
 }
 
-func (r *Request) SetPending() bool {
-	return r.state.CAS(rsNew, rsPending)
+func (r *Request) State() uint32 {
+	return r.state
+}
+
+func (r *Request) cas(old, new uint32) (set bool){
+	r.Lock()
+	if set = r.state == old; set {
+		r.state = new
+	}
+	r.Unlock()
+	return
+}
+
+func (r *Request) SetPending() (set bool) {
+	return r.cas(RsNew, RsPending)
 }
 
 // SetInFly should be called when you going to work with request.
-func (r *Request) SetInFly(res ChainingResponder) bool {
-	if r.state.CAS(rsPending, rsInFly) {
-		res.SetReq(r, res)
-		return true
+func (r *Request) SetInFly(res Middleware) (set bool) {
+	r.Lock()
+	if r.state == RsPending {
+		r.state = RsInFly
+		if (res != nil) {
+			res.setReq(r, res)
+		}
+		set = true
 	}
-	return false
-}
-
-func (r *Request) setPrepared() bool {
-	return r.state.CAS(rsInFly, rsPrepared)
-}
-
-func (r *Request) setPerformed() bool {
-	if r.state.CAS(rsPrepared, rsPerformed) {
-		return true
-	}
-	return r.state.CAS(rsPreparedIgnoreCancel, rsPerformed)
-}
-
-func (r *Request) doCancel() {
-	if r.Responder != nil {
-		r.Responder.Cancel()
-	}
-	select {
-	case r.canceled <- true:
-	default:
-	}
-	r.state.Store(rsCanceled)
-	r.Responder = nil
+	r.Unlock()
+	return
 }
 
 func (r *Request) Cancel() bool {
-	if r.goingToCancel() {
-		r.doCancel()
+	r.Lock()
+	defer r.Unlock()
+	if r.state == RsNew || r.state & (RsPending | RsInFly) != 0 {
+		r.chainCancel(nil)
 		return true
 	}
 	return false
 }
 
-func (r *Request) expireSend() bool {
-	return r.state.CAS(rsPending, rsToCancel)
-}
-
-func (r *Request) goingToCancel() (willCancel bool) {
-	var old, set util.Atomic
-	for {
-		old, set = r.state.Get(), 0
-		willCancel = false
-		if old == rsNew || old == rsPending || old == rsInFly {
-			set = rsToCancel
-			willCancel = true
-		} else if old == rsPrepared {
-			set = rsPreparedIgnoreCancel
-		} else {
-			return
-		}
-		if r.state.CAS(old, set) {
-			return
-		}
+func (r *Request) ResponseInAMiddle(middle Middleware, res Response) {
+	r.state = RsToCancel
+	r.chainCancel(middle)
+	if r.state == RsCanceled {
+		log.Panicf("Try to respond in a middle for response %+v, while it were not in a chain", middle)
+	}
+	if prev := middle.unchain(); prev != nil {
+		r.chainResponse(res)
+	} else {
+		log.Panicf("Middleware %+v is not in a chain", middle)
 	}
 }
 
@@ -140,65 +129,82 @@ func (r *Request) goingToCancel() (willCancel bool) {
    after this function returns
    */
 func (r *Request) Canceled() bool {
-	st := r.state.Get()
-	return st == rsToCancel || st == rsPreparedToCancel || st == rsCanceled
+	r.Lock()
+	defer r.Unlock()
+	st := r.state
+	return st == RsToCancel || st == RsPreparedToCancel || st == RsCanceled
 }
 
-// ResetToPending is for Resenders on IOError. It should be called in a Responder.
+// ResetToPending is for ResendeRs on IOError. It should be called in a Responder.
 // Note, if it returns false, then Responder is already performed
 func (r *Request) ResetToPending(res Response, originalResponder Responder) bool {
-	if r.state.CAS(rsPrepared, rsPending) {
+	if r.state == RsPrepared {
+		r.state = RsPending
 		return true
-	}
-	if r.state.Is(rsPreparedIgnoreCancel) {
-		originalResponder.Respond(res)
-		return false
 	}
 	log.Panicf("ResetToPending should be called only for performed requests")
 	return false
 }
 
-func (r *Request) Response(res Response) (respondCalled bool) {
-	if r.setPrepared() {
-		r.Responder.Respond(res)
-		r.setPerformed()
-		return true
+func (r *Request) chainCancel(middle Middleware) {
+	r.state = RsToCancel
+	for chain := r.chain; chain != nil; {
+		chain.Cancel()
+		if (chain == middle) {
+			return
+		}
+		chain = chain.unchain()
 	}
-	return false
+	select {
+	case r.canceled <- true:
+	default:
+	}
+	r.state = RsCanceled
 }
 
-func (r *Request) ResponseRecvTimeout() (respondCalled bool) {
-	if r.setPrepared() {
-		res := Response { Id: r.Id, Msg: r.Msg, Code: RcRecvTimeout }
-		r.Responder.Respond(res)
-		r.setPerformed()
-		return true
+func (r *Request) chainResponse(res Response) {
+	r.state = RsPrepared
+	for chain := r.chain; chain != nil; {
+		chain.Respond(&res)
+		if r.state != RsPrepared {
+			return
+		}
+		chain = chain.unchain()
 	}
-	return false
+	r.Responder.Respond(res)
+	r.state = RsPerformed
 }
 
-func (r *Request) ResponseIOError() (respondCalled bool) {
-	if r.setPrepared() {
-		res := Response { Id: r.Id, Msg: r.Msg, Code: RcIOError }
-		r.Responder.Respond(res)
-		r.setPerformed()
-		return false
+func (r *Request) Response(res Response, responder Middleware) {
+	r.Lock()
+	defer r.Unlock()
+	if r.state == RsInFly && responder == r.chain {
+		r.chainResponse(res)
 	}
-	return true
 }
 
-func (r *Request) ChainResponder(res ChainingResponder) {
-	res.SetReq(r, res)
+func (r *Request) ChainResponder(res Middleware) {
+	r.Lock()
+	res.setReq(r, res)
+	r.Unlock()
+}
+
+func (r *Request) UnchainResponder(res Middleware) {
+	r.Lock()
+	if r.chain == res {
+		res.unchain()
+	}
+	r.Unlock()
 }
 
 const (
-	rsNew = util.Atomic(iota)
-	rsPending
-	rsInFly
-	rsPrepared
-	rsPerformed
-	rsToCancel
-	rsCanceled
-	rsPreparedToCancel
-	rsPreparedIgnoreCancel
+	RsNew = uint32(0)
+	RsPending = uint32(1 << iota)
+	RsInFly
+	RsPrepared
+	RsPerformed
+	RsToCancel
+	RsCanceled
+	RsPreparedToCancel
+	RsPreparedIgnoreCancel
 )

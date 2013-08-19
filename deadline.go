@@ -47,52 +47,56 @@ func (d *Deadline) Wrap(r *Request) {
 }
 
 func (d *Deadline) sendExpired() {
-	if r := d.Request; r != nil {
-		if r.expireSend() {
-			d.state.Store(dsCanceling)
-			r.doCancel()
+	r := d.Request
+	if r == nil {
+		return
+	}
+	r.Lock()
+	defer r.Unlock()
+	if d.Request == r {
+		state := r.State()
+		if state == RsNew || state == RsPending {
 			res := Response { Id: r.Id, Msg: r.Msg, Code: RcSendTimeout }
-			if prev := d.Unchain(); prev != nil {
-				prev.Respond(res)
-			}
+			r.ResponseInAMiddle(d, res)
+		} else if state == RsPrepared || state == RsPerformed {
+			return
+		} else if state == RsInFly && r.WorkTime == 0 {
+			d.doRecvExpired()
+		} else if recvRemains := r.Deadline.Sub(NowEpoch()); recvRemains <= 0 {
+			d.doRecvExpired()
 		} else {
-			if r.WorkTime > 0 {
-				if recvRemains := r.Deadline.Sub(NowEpoch()); recvRemains > 0 {
-					d.timer = time.AfterFunc(recvRemains, d.recvExpired)
-				}
-			}
-			d.recvExpired()
+			d.timer = time.AfterFunc(recvRemains, d.recvExpired)
 		}
 	}
+}
+
+func (d *Deadline) doRecvExpired() {
+	r := d.Request
+	res := Response { Id: r.Id, Msg: r.Msg, Code: RcRecvTimeout }
+	r.ResponseInAMiddle(d, res)
 }
 
 func (d *Deadline) recvExpired() {
-	if r := d.Request; r != nil && r.goingToCancel() {
-		d.state.Store(dsCanceling)
-		r.doCancel()
-		res := Response { Id: r.Id, Msg: r.Msg, Code: RcRecvTimeout }
-		if prev := d.Unchain(); prev != nil {
-			prev.Respond(res)
+	r := d.Request
+	if r == nil {
+		return
+	}
+	r.Lock()
+	defer r.Unlock()
+	if d.Request == r {
+		state := r.State()
+		if state == RsNew || state == RsPending || state == RsInFly {
+			d.doRecvExpired()
 		}
 	}
 }
 
-func (d *Deadline) Respond(res Response) {
-	if d.state.CAS(dsNil, dsResponding) {
-		d.timer.Stop()
-		prev := d.Unchain()
-		if prev != nil {
-			prev.Respond(res)
-		}
-	}
+func (d *Deadline) Respond(res *Response) {
+	d.timer.Stop()
 }
 
 func (d *Deadline) Cancel() {
-	if !d.state.Is(dsCanceling) {
+	if d.timer != nil {
 		d.timer.Stop()
-		prev := d.Unchain()
-		if prev != nil {
-			prev.Cancel()
-		}
 	}
 }

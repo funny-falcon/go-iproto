@@ -12,19 +12,8 @@ type Request struct {
 	fakeId uint32
 }
 
-func (r *Request) Respond(res iproto.Response) {
+func (r *Request) Respond(res *iproto.Response) {
 	res.Id = r.Request.Id
-	prev := r.Unchain()
-	if prev != nil {
-		prev.Respond(res)
-	}
-}
-
-func (r *Request) Cancel() {
-	prev := r.Unchain()
-	if prev != nil {
-		prev.Cancel()
-	}
 }
 
 const (
@@ -111,15 +100,15 @@ func (h *RequestHolder) putBack(r *Request) {
 	}
 }
 
-func (h *RequestHolder) getAll() (reqs []*iproto.Request) {
+func (h *RequestHolder) getAll() (reqs []*Request) {
 	h.Lock()
 	defer h.Unlock()
-	reqs = make([]*iproto.Request, h.count)
+	reqs = make([]*Request, h.count)
 	i := 0
 	for _, row := range h.reqs {
 		for _, req := range row.reqs {
-			if req.fakeId != 0 {
-				reqs[i] = req.Request
+			if req.fakeId != 0 && req.Request != nil {
+				reqs[i] = &req
 				i++
 			}
 		}
