@@ -72,8 +72,12 @@ func (r *Request) SetPending() bool {
 }
 
 // SetInFly should be called when you going to work with request.
-func (r *Request) SetInFly() bool {
-	return r.state.CAS(rsPending, rsInFly)
+func (r *Request) SetInFly(res ChainingResponder) bool {
+	if r.state.CAS(rsPending, rsInFly) {
+		res.SetReq(r, res)
+		return true
+	}
+	return false
 }
 
 func (r *Request) setPrepared() bool {

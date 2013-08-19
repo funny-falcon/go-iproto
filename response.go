@@ -84,13 +84,6 @@ func (r *BasicResponder) Cancel() {
 	}
 }
 
-func (r *BasicResponder) SetInFly() bool {
-	if ireq := r.Request; ireq != nil {
-		return ireq.SetInFly()
-	}
-	return false
-}
-
 type Callback struct {
 	cb func(Response)
 }

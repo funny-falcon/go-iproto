@@ -99,7 +99,7 @@ func (h *RequestHolder) putBack(r *Request) {
 			log.Panicf("Map has no RequestRow for %d", r.fakeId)
 		}
 		h.RUnlock()
-		reqs.reqs[r.fakeId&rowMask].Unchain()
+		reqs.reqs[r.fakeId&rowMask].fakeId = 0
 		border := big == 0 || big == util.Atomic(iproto.PingRequestId>>8)
 		freed := reqs.freed.Incr()
 		if freed == rowN || (freed == rowN1 && border) {

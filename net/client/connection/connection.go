@@ -184,8 +184,7 @@ func (conn *Connection) controlLoop() {
 
 func (conn *Connection) putInFly(request *iproto.Request) *Request {
 	req := conn.inFly.getNext(conn)
-	request.ChainResponder(req)
-	if req.SetInFly() {
+	if request.SetInFly(req) {
 		return req
 	}
 	conn.inFly.putBack(req)
