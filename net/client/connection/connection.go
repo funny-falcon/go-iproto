@@ -66,7 +66,6 @@ type Connection struct {
 
 	closeWrite   chan bool
 	readErr      error
-	controlOk    bool
 
 	inFly        RequestHolder
 
@@ -84,8 +83,6 @@ func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 	conn = &Connection{
 		CConf: conf,
 		Id:    id,
-
-		controlOk:    true,
 
 		inFly:        RequestHolder{reqs: make(reqMap)},
 
