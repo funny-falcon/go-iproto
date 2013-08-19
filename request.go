@@ -25,44 +25,15 @@ type Request struct {
 	Responder Responder
 	chain    Middleware
 
-	Deadline     Epoch
-	/* WorkTime is a hint to EndPoint, will Deadline be reached if we send request now.
-	   If set, then sender will check: if Deadline - TypicalWorkTime is already expired,
-	   than it will not try to send Request to network */
-	WorkTime time.Duration
-
 	sync.Mutex
 	canceled  chan bool
 }
 
-func (r *Request) Send(serv EndPoint) bool {
-	if !r.SetPending() {
-		log.Panic("Request already sent somewhere")
-		return false
+func (r *Request) SetDeadline(deadline Epoch, worktime time.Duration) {
+	if !deadline.Zero() {
+		d := Deadline{Deadline: deadline, WorkTime: worktime}
+		d.Wrap(r)
 	}
-	if r.Deadline.Zero() {
-		r.Deadline = serv.DefaultDeadline()
-	}
-	if r.WorkTime == 0 {
-		r.WorkTime = serv.TypicalWorkTime(r.Msg)
-	}
-
-	wrapInDeadline(r)
-
-	select {
-	case serv.RequestChan() <- r:
-		return true
-	case <-r.canceled:
-		return false
-	}
-}
-
-func (r *Request) SendExpired() bool {
-	return r.Deadline.WillExpire(r.WorkTime)
-}
-
-func (r *Request) Expired() bool {
-	return r.Deadline.WillExpire(0)
 }
 
 func (r *Request) CancelChan() <-chan bool {
@@ -113,14 +84,11 @@ func (r *Request) Cancel() bool {
 func (r *Request) ResponseInAMiddle(middle Middleware, res Response) {
 	r.state = RsToCancel
 	r.chainCancel(middle)
-	if r.state == RsCanceled {
+	if r.state == RsCanceled || r.chain != middle {
 		log.Panicf("Try to respond in a middle for response %+v, while it were not in a chain", middle)
 	}
-	if prev := middle.unchain(); prev != nil {
-		r.chainResponse(res)
-	} else {
-		log.Panicf("Middleware %+v is not in a chain", middle)
-	}
+	middle.unchain()
+	r.chainResponse(res)
 }
 
 /* Canceled returns: did some called Cancel() and it were successful.
@@ -132,7 +100,7 @@ func (r *Request) Canceled() bool {
 	r.Lock()
 	defer r.Unlock()
 	st := r.state
-	return st == RsToCancel || st == RsPreparedToCancel || st == RsCanceled
+	return st == RsToCancel || st == RsCanceled
 }
 
 // ResetToPending is for ResendeRs on IOError. It should be called in a Responder.
@@ -178,18 +146,18 @@ func (r *Request) chainResponse(res Response) {
 func (r *Request) Response(res Response, responder Middleware) {
 	r.Lock()
 	defer r.Unlock()
-	if r.state == RsInFly && responder == r.chain {
+	if r.state == RsInFly && (responder == nil || responder == r.chain) {
 		r.chainResponse(res)
 	}
 }
 
-func (r *Request) ChainResponder(res Middleware) {
+func (r *Request) ChainMiddleware(res Middleware) {
 	r.Lock()
 	res.setReq(r, res)
 	r.Unlock()
 }
 
-func (r *Request) UnchainResponder(res Middleware) {
+func (r *Request) UnchainMiddleware(res Middleware) {
 	r.Lock()
 	if r.chain == res {
 		res.unchain()
@@ -205,6 +173,5 @@ const (
 	RsPerformed
 	RsToCancel
 	RsCanceled
-	RsPreparedToCancel
-	RsPreparedIgnoreCancel
+	RsTimeout
 )

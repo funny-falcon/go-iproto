@@ -8,11 +8,21 @@ import (
 var _ = log.Print
 
 type EndPoint interface {
-	Run(chan *Request)
+	Runned() bool
+	Run(requests chan *Request, standalone bool)
 	Stop()
-	RequestChan() chan<- *Request
-	DefaultDeadline() Epoch
-	TypicalWorkTime(RequestType) time.Duration
+	// Send accepts request to work. It should setup deadline, if it is defined for end point
+	Send(*Request)
+	// SendWrapped accepts request to work. It should not setup deadline, assuming, someone did it already
+	SendWrapped(*Request)
+}
+
+func Run(s EndPoint) {
+	if s.Runned() {
+		log.Panicf("EndPoint already runned ( %v )", s)
+	}
+	ch := make(chan *Request, 256)
+	s.Run(ch, true)
 }
 
 //   SimplePoint is a simple EndPoint implementation.
@@ -31,15 +41,19 @@ type EndPoint interface {
 type SimplePoint struct {
 	requests chan *Request
 	exit     chan bool
+	isStandalone  bool
+	Timeout  time.Duration
+	Worktime time.Duration
 }
 var _ EndPoint = (*SimplePoint)(nil)
 
-func (s *SimplePoint) SetChan(ch chan *Request) {
-	s.requests = ch
+func (s *SimplePoint) Runned() bool {
+	return s.requests != nil
 }
 
-func (s *SimplePoint) RequestChan() chan<- *Request {
-	return s.requests
+func (s *SimplePoint) SetChan(ch chan *Request, standalone bool) {
+	s.requests = ch
+	s.isStandalone = standalone
 }
 
 func (s *SimplePoint) ReceiveChan() <-chan *Request {
@@ -47,15 +61,10 @@ func (s *SimplePoint) ReceiveChan() <-chan *Request {
 }
 
 func (s *SimplePoint) RunChild(p EndPoint) {
-	p.Run(s.requests)
-}
-
-func (s *SimplePoint) DefaultDeadline() (d Epoch) {
-	return
-}
-
-func (s *SimplePoint) TypicalWorkTime(RequestType) (d time.Duration) {
-	return
+	if p.Runned() {
+		log.Panicf("EndPoint already runned ( %v )", s)
+	}
+	p.Run(s.requests, false)
 }
 
 func (s *SimplePoint) Init() {
@@ -67,8 +76,8 @@ func (s *SimplePoint) ExitChan() <-chan bool {
 }
 
 // Run - main function to override. Example
-//     func (s *MyEndPoint) Run(ch chan *Request) {
-//     	s.SetChan(ch)
+//     func (s *MyEndPoint) RunAsChild(ch chan *Request, standalone bool) {
+//     	s.SetChan(ch, standalone)
 //     	go func() {
 //     		for {
 //     			select {
@@ -86,8 +95,57 @@ func (s *SimplePoint) ExitChan() <-chan bool {
 //     		}
 //     	}()
 //     }
-func (s *SimplePoint) Run(ch chan *Request) {
+func (s *SimplePoint) Run(ch chan *Request, standalone bool) {
+	s.SetChan(ch, standalone)
 	panic("(*SimplePoint).Run should be overrided")
+}
+
+func (s *SimplePoint) SendWrapped(r *Request) {
+	if s.requests == nil {
+		panic("EndPoint is not running")
+	}
+
+	if !s.isStandalone {
+		log.Panicf("you should not call SendWrapped on child endpoint %+v", s)
+	}
+
+	if !r.SetPending() {
+		if r.state == RsPerformed {
+			return
+		}
+		log.Panicf("Request already sent somewhere %+v")
+	}
+
+	select {
+	case s.requests <- r:
+	case <-r.canceled:
+	}
+}
+
+func (s *SimplePoint) Send(r *Request) {
+	if s.requests == nil {
+		panic("EndPoint is not running")
+	}
+
+	if !s.isStandalone {
+		log.Panicf("you should not call SendWrapped on child endpoint %+v", s)
+	}
+
+	if !r.SetPending() {
+		if r.state == RsPerformed {
+			return
+		}
+		log.Panicf("Request already sent somewhere %+v")
+	}
+
+	if s.Timeout > 0 {
+		r.SetDeadline(NowEpoch().Add(s.Timeout), s.Worktime)
+	}
+
+	select {
+	case s.requests <- r:
+	case <-r.canceled:
+	}
 }
 
 func (s *SimplePoint) Stop() {

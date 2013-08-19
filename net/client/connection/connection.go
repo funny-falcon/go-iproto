@@ -101,8 +101,8 @@ func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 /* default 5 seconds interval for Connection */
 const DialTimeout = 5 * time.Second
 
-func (conn *Connection) Run(ch chan *iproto.Request) {
-	conn.SetChan(ch)
+func (conn *Connection) Run(ch chan *iproto.Request, standalone bool) {
+	conn.SetChan(ch, standalone)
 	go conn.dial()
 }
 
@@ -312,9 +312,6 @@ Loop:
 				Id:   iproto.PingRequestId,
 			}
 		} else {
-			if request.SendExpired() {
-				continue
-			}
 			if req = conn.putInFly(request); req == nil {
 				continue
 			}

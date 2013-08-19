@@ -10,6 +10,13 @@ var _ = log.Print
 
 type Deadline struct {
 	BasicResponder
+
+	Deadline     Epoch
+	/* WorkTime is a hint to EndPoint, will Deadline be reached if we send request now.
+	   If set, then sender will check: if Deadline - TypicalWorkTime is already expired,
+	   than it will not try to send Request to network */
+	WorkTime time.Duration
+
 	state util.Atomic
 	timer  *time.Timer
 }
@@ -20,23 +27,11 @@ const (
 	dsResponding
 )
 
-func wrapInDeadline(r *Request) {
-	if r.Deadline.Zero() {
-		return
-	}
-	d := Deadline{}
-	d.Wrap(r)
-}
-
 func (d *Deadline) Wrap(r *Request) {
-	if r.Deadline.Zero() {
-		return
-	}
-
 	r.canceled = make(chan bool, 1)
 
-	sendRemains := r.Deadline.Sub(NowEpoch()) - r.WorkTime
-	r.ChainResponder(d)
+	sendRemains := d.Deadline.Sub(NowEpoch()) - d.WorkTime
+	r.ChainMiddleware(d)
 
 	if sendRemains < 0 {
 		d.sendExpired()
@@ -60,9 +55,9 @@ func (d *Deadline) sendExpired() {
 			r.ResponseInAMiddle(d, res)
 		} else if state == RsPrepared || state == RsPerformed {
 			return
-		} else if state == RsInFly && r.WorkTime == 0 {
+		} else if state == RsInFly && d.WorkTime == 0 {
 			d.doRecvExpired()
-		} else if recvRemains := r.Deadline.Sub(NowEpoch()); recvRemains <= 0 {
+		} else if recvRemains := d.Deadline.Sub(NowEpoch()); recvRemains <= 0 {
 			d.doRecvExpired()
 		} else {
 			d.timer = time.AfterFunc(recvRemains, d.recvExpired)

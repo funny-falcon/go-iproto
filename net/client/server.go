@@ -78,8 +78,8 @@ func (cfg *ServerConf) NewServer() (serv *Server) {
 	return
 }
 
-func (serv *Server) Run(ch chan *iproto.Request) {
-	serv.SetChan(ch)
+func (serv *Server) Run(ch chan *iproto.Request, standalone bool) {
+	serv.SetChan(ch, standalone)
 	serv.needConns = serv.Connections
 	serv.fixConnections()
 	go serv.Loop()
