@@ -53,6 +53,10 @@ func (cfg *ServerConf) NewServer() (serv *Server) {
 	cfg.SetDefaults()
 
 	serv = &Server{
+		SimplePoint: iproto.SimplePoint{
+			Timeout: cfg.Timeout,
+			Worktime: cfg.Worktime,
+		},
 		conf: conf{
 			SConf: SConf{
 				Name:           cfg.Name,

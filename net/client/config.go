@@ -19,6 +19,9 @@ type ServerConf struct {
 	PingInterval time.Duration
 
 	RetCodeLen int
+
+	Timeout time.Duration
+	Worktime time.Duration
 }
 
 var DefaultReadTimeout = 30 * time.Second
