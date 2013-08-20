@@ -7,14 +7,18 @@ import (
 
 var _ = log.Print
 
-type EndPoint interface {
-	Runned() bool
-	Run(requests chan *Request, standalone bool)
-	Stop()
+type Service interface {
 	// Send accepts request to work. It should setup deadline, if it is defined for end point
 	Send(*Request)
 	// SendWrapped accepts request to work. It should not setup deadline, assuming, someone did it already
 	SendWrapped(*Request)
+	Runned() bool
+}
+
+type EndPoint interface {
+	Service
+	Run(requests chan *Request, standalone bool)
+	Stop()
 }
 
 func Run(s EndPoint) {
@@ -110,6 +114,7 @@ func (s *SimplePoint) SendWrapped(r *Request) {
 	}
 
 	if !r.SetPending() {
+		/* this could happen if SetDeadline already respond with timeout */
 		if r.state == RsPerformed {
 			return
 		}
@@ -132,6 +137,7 @@ func (s *SimplePoint) Send(r *Request) {
 	}
 
 	if !r.SetPending() {
+		/* this could happen if SetDeadline already respond with timeout */
 		if r.state == RsPerformed {
 			return
 		}
@@ -140,6 +146,11 @@ func (s *SimplePoint) Send(r *Request) {
 
 	if s.Timeout > 0 {
 		r.SetDeadline(NowEpoch().Add(s.Timeout), s.Worktime)
+	}
+
+	/* this could happen if SetDeadline already respond with timeout */
+	if r.state == RsPerformed {
+		return
 	}
 
 	select {

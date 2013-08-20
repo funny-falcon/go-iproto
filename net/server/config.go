@@ -9,7 +9,7 @@ type Config struct {
 	Network string
 	Address string
 
-	EndPoint iproto.EndPoint
+	EndPoint iproto.Service
 
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
