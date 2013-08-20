@@ -41,6 +41,11 @@ type Responder interface {
 	Respond(Response)
 }
 
+type Callback func(Response)
+func (f Callback) Respond(r Response) {
+	f(r)
+}
+
 type Middleware interface {
 	Respond(Response) Response
 	Cancel()
@@ -79,8 +84,4 @@ func (r *BasicResponder) Respond(resp Response) Response {
 }
 
 func (r *BasicResponder) Cancel() {
-}
-
-type Callback struct {
-	cb func(Response)
 }
