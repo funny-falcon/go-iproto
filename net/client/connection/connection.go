@@ -161,10 +161,10 @@ func (conn *Connection) controlLoop() {
 		action := <-conn.loopNotify
 		switch action {
 		case writeClosed:
-			conn.State &^= CsClosed
+			conn.State &= CsClosed
 			conn.State |= CsWriteClosed
 		case readClosed:
-			conn.State &^= CsClosed
+			conn.State &= CsClosed
 			conn.State |= CsReadClosed
 			if conn.State & CsWriteClosed == 0 {
 				conn.Stop()
