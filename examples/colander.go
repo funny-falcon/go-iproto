@@ -7,7 +7,12 @@ import (
 	"encoding/binary"
 	"log"
 	"time"
+
+	"flag"
+	"runtime/pprof"
+	"os"
 )
+
 var _ = log.Print
 
 const (
@@ -88,11 +93,29 @@ var recurConf = client.ServerConfig {
 	PingInterval: time.Hour,
 }
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
 func main() {
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
 	recur := recurConf.NewServer()
 	colanderTest.Recur = recur
 	self := serverConf.NewServer()
 	self.Run()
 	iproto.Run(recur)
-	<-(chan bool)(nil)
+
+	ch := make(chan bool)
+	go func(){
+		os.Stdin.Read(make([]byte, 1))
+		ch<- true
+	}()
+	<-ch
 }
