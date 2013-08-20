@@ -22,18 +22,28 @@ type Server struct {
 	currentId uint64
 }
 
-func (s *Server) Run() (err error) {
-	if !s.EndPoint.Runned() {
-		return fmt.Errorf("End point is not running %+v", s.EndPoint)
+func (cfg *Config) NewServer() (serv *Server) {
+	serv = &Server{
+		Config: *cfg,
 	}
-	if s.listener, err = net.Listen(s.Network, s.Address); err != nil {
+
+	serv.connClosed = make(chan uint64)
+	serv.conns = make(map[uint64] *Connection)
+
+	return
+}
+
+
+func (serv *Server) Run() (err error) {
+	if !serv.EndPoint.Runned() {
+		return fmt.Errorf("End point is not running %+v", serv.EndPoint)
+	}
+	if serv.listener, err = net.Listen(serv.Network, serv.Address); err != nil {
 		return
 	}
 
-	s.connClosed = make(chan uint64)
-
-	go s.listenLoop()
-	go s.controlLoop()
+	go serv.listenLoop()
+	go serv.controlLoop()
 	return
 }
 
@@ -89,6 +99,7 @@ func (serv *Server) listenLoop() {
 		serv.currentId++
 		connection := NewConnection(serv, conn.(nt.NetConn), serv.currentId)
 		serv.conns[serv.currentId] = connection
+		connection.Run()
 		serv.Unlock()
 	}
 }

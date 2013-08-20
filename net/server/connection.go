@@ -14,6 +14,7 @@ type notifyAction uint32
 const (
 	writeClosed = notifyAction(iota + 1)
 	readClosed
+	inFlyEmpty
 )
 
 type ConnState uint32
@@ -43,6 +44,7 @@ type Connection struct {
 }
 
 func NewConnection(serv *Server, connection nt.NetConn, id uint64) (conn *Connection) {
+	log.Print("New connection ", id, connection.RemoteAddr())
 	conn = &Connection {
 		Server: serv,
 		Id: id,
@@ -72,32 +74,58 @@ func (conn *Connection) Stop() {
 }
 
 func (conn *Connection) Respond(r iproto.Response) {
+	var ok bool
 	conn.Lock()
-	delete(conn.inFly, r.Id)
-	needClose := conn.state | CsReadClosed != 0 && len(conn.inFly) == 0
+	if _, ok = conn.inFly[r.Id]; ok {
+		delete(conn.inFly, r.Id)
+	}
+	if conn.state & CsReadClosed != 0 && len(conn.inFly) == 0 {
+		conn.notifyLoop(inFlyEmpty)
+	}
 	conn.Unlock()
-	conn.buffer.in <- nt.Response(r)
-	if needClose {
-		conn.buffer.CloseIn()
+	if ok {
+		conn.buffer.in <- nt.Response(r)
 	}
 }
 
 func (conn *Connection) closed() {
+	log.Print("Closed ", conn.Id, conn.conn.RemoteAddr())
+	conn.Lock()
+	reqs := make([]*iproto.Request, 0, len(conn.inFly))
+	for _, req := range conn.inFly {
+		reqs[len(reqs)] = req
+	}
+	conn.Unlock()
+	for _, req := range reqs {
+		req.Cancel()
+	}
+	conn.Server.connClosed <- conn.Id
 }
 
 func (conn *Connection) controlLoop() {
+	defer conn.closed()
+	inIsClosed := false
 	for {
 		action := <-conn.loopNotify
 		switch action {
 		case readClosed:
-			conn.state &^= CsClosed
+			conn.state &= CsClosed
 			conn.state |= CsReadClosed
+			log.Print("Read Closed ", conn.Id, conn.state, conn.conn.RemoteAddr())
 		case writeClosed:
-			conn.state &^= CsClosed
+			conn.state &= CsClosed
 			conn.state |= CsWriteClosed
+			log.Print("Write Closed ", conn.Id, conn.state, conn.conn.RemoteAddr())
 			if conn.state & CsReadClosed == 0 {
 				conn.conn.CloseRead()
 			}
+		case inFlyEmpty:
+			log.Print("InFly Empty", conn.Id, conn.state, conn.conn.RemoteAddr())
+		}
+
+		if !inIsClosed && conn.state & CsReadClosed != 0 && len(conn.inFly) == 0 {
+			inIsClosed = true
+			conn.buffer.CloseIn()
 		}
 
 		if conn.state & CsClosed == CsClosed {
@@ -144,6 +172,7 @@ func (conn *Connection) readLoop() {
 			Body: req.Body,
 			Responder: conn,
 		}
+		request.SetPending()
 		conn.Lock()
 		conn.inFly[request.Id] = &request
 		conn.Unlock()
@@ -159,7 +188,7 @@ func (conn *Connection) sendRescue(req *iproto.Request) {
 			Msg: req.Msg,
 			Code: iproto.RcFailed,
 		}
-		conn.Respond(res)
+		req.Response(res, nil)
 	}
 }
 
