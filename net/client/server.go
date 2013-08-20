@@ -51,7 +51,7 @@ type Server struct {
 
 var _ iproto.EndPoint = (*Server)(nil)
 
-func (cfg *ServerConf) NewServer() (serv *Server) {
+func (cfg *ServerConfig) NewServer() (serv *Server) {
 	cfg.SetDefaults()
 
 	serv = &Server{

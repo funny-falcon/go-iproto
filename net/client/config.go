@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-type ServerConf struct {
+type ServerConfig struct {
 	Network string
 	Address string
 
@@ -28,7 +28,7 @@ var DefaultReadTimeout = 30 * time.Second
 var DefaultWriteTimeout = 30 * time.Second
 var DefaultPingInterval = 1 * time.Second
 
-func (cfg *ServerConf) SetDefaults() *ServerConf {
+func (cfg *ServerConfig) SetDefaults() *ServerConfig {
 	if cfg.Address == "" {
 		log.Panic("Could not init iproto.ClientServer with empty address")
 	}
