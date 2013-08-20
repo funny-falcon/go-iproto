@@ -42,7 +42,7 @@ type Responder interface {
 }
 
 type Middleware interface {
-	Respond(*Response)
+	Respond(Response) Response
 	Cancel()
 	valid() bool
 	setReq(req *Request, self Middleware)
@@ -74,7 +74,8 @@ func (r *BasicResponder) valid() bool {
 	return r.Request != nil
 }
 
-func (r *BasicResponder) Respond(*Response) {
+func (r *BasicResponder) Respond(resp Response) Response {
+	return resp
 }
 
 func (r *BasicResponder) Cancel() {

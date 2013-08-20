@@ -86,8 +86,9 @@ func (d *Deadline) recvExpired() {
 	}
 }
 
-func (d *Deadline) Respond(res *Response) {
+func (d *Deadline) Respond(res Response) Response {
 	d.timer.Stop()
+	return res
 }
 
 func (d *Deadline) Cancel() {

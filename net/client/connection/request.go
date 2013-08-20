@@ -9,7 +9,8 @@ type Request struct {
 	fakeId uint32
 }
 
-func (r *Request) Respond(res *iproto.Response) {
+func (r *Request) Respond(res iproto.Response) iproto.Response {
 	res.Id = r.Request.Id
+	return res
 }
 

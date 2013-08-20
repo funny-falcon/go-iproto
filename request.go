@@ -140,7 +140,7 @@ func (r *Request) chainCancel(middle Middleware) {
 func (r *Request) chainResponse(res Response) {
 	r.state = RsPrepared
 	for chain := r.chain; chain != nil; {
-		chain.Respond(&res)
+		res = chain.Respond(res)
 		if r.state != RsPrepared {
 			return
 		}
