@@ -4,6 +4,7 @@ import (
 	"log"
 	"time"
 	"sync"
+	"sync/atomic"
 )
 
 // RequestType is a iproto request tag which goes fiRst in a packet
@@ -104,9 +105,7 @@ func (r *Request) ResponseInAMiddle(middle Middleware, res Response) {
    after this function returns
    */
 func (r *Request) Canceled() bool {
-	r.Lock()
-	defer r.Unlock()
-	st := r.state
+	st := atomic.LoadUint32(&r.state)
 	return st == RsToCancel || st == RsCanceled
 }
 

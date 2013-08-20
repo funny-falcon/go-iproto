@@ -37,7 +37,6 @@ func (tm *Timeout) UnFreeze(i interface{}) {
 
 func (tm *Timeout) doAction(i interface{}, action action) (err error) {
 	tm.mutex.Lock()
-	defer tm.mutex.Unlock()
 
 	switch action {
 	case freeze:
@@ -49,6 +48,7 @@ func (tm *Timeout) doAction(i interface{}, action action) (err error) {
 
 	conn, ok := i.(SetDeadliner)
 	if !ok {
+		tm.mutex.Unlock()
 		return
 	}
 
@@ -58,6 +58,7 @@ func (tm *Timeout) doAction(i interface{}, action action) (err error) {
 	} else if tm.state&unset == 0 && (tm.state&unfrozen == 0 || tm.Timeout == 0) {
 		err = tm.clear(conn)
 	}
+	tm.mutex.Unlock()
 	return
 }
 
