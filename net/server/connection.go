@@ -237,7 +237,7 @@ Loop:
 			}
 		}
 
-		if err = header.WriteResponse(conn.conn, res, conn.RetCodeLen); err != nil {
+		if err = header.WriteResponse(write, res, conn.RetCodeLen); err != nil {
 			break Loop
 		}
 	}
