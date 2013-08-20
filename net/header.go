@@ -136,14 +136,15 @@ func (h *HeaderIO) WriteRequest(w io.Writer, req Request) (err error) {
 
 func (h *HeaderIO) WriteResponse(w io.Writer, res Response, retCodeLen int) (err error) {
 	var head []byte
-	body_len := uint32(len(res.Body) + retCodeLen)
-	bin_le.PutUint32(h.buf[:4], uint32(res.Msg))
-	bin_le.PutUint32(h.buf[4:8], body_len)
-	bin_le.PutUint32(h.buf[8:12], res.Id)
 
 	if res.Msg == iproto.Ping {
 		retCodeLen = 0
 	}
+
+	body_len := uint32(len(res.Body) + retCodeLen)
+	bin_le.PutUint32(h.buf[:4], uint32(res.Msg))
+	bin_le.PutUint32(h.buf[4:8], body_len)
+	bin_le.PutUint32(h.buf[8:12], res.Id)
 
 	switch retCodeLen {
 	case 0:
