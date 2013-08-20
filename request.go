@@ -36,6 +36,13 @@ func (r *Request) SetDeadline(deadline Epoch, worktime time.Duration) {
 	}
 }
 
+func (r *Request) SetTimeout(deadline time.Duration, worktime time.Duration) {
+	if deadline > 0 {
+		d := Deadline{Deadline: NowEpoch().Add(deadline), WorkTime: worktime}
+		d.Wrap(r)
+	}
+}
+
 func (r *Request) CancelChan() <-chan bool {
 	return r.canceled
 }
@@ -163,6 +170,10 @@ func (r *Request) UnchainMiddleware(res Middleware) {
 		res.unchain()
 	}
 	r.Unlock()
+}
+
+func (r *Request) Respond(code RetCode, body []byte) {
+	r.Response(Response{ Id: r.Id, Msg: r.Msg, Code: code, Body: body }, nil)
 }
 
 const (
