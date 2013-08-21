@@ -66,13 +66,14 @@ func (s *Service) DoSumTest(r *iproto.Request) {
 		req := wg.Request(OP_TEST, body)
 		s.Recur.Send(req)
 	}
-	wg.Wait(func(r iproto.Response) {
-		if r.Code != iproto.RcOK {
+
+	for res := range wg.Results() {
+		if res.Code != iproto.RcOK {
 			wg.Cancel()
 			result = RcError
 		}
-		sum += le.Uint32(r.Body)
-	})
+		sum += le.Uint32(res.Body)
+	}
 
 	body := make([]byte, 4)
 	le.PutUint32(body, sum)

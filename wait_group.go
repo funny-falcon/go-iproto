@@ -2,14 +2,15 @@ package iproto
 
 import (
 	"sync"
+	"github.com/funny-falcon/go-iproto/util"
 )
 
 type WaitGroup struct {
 	m sync.Mutex
-	wg sync.WaitGroup
-	callback Callback
+	c util.Atomic
 	requests []*Request
 	responses []Response
+	ch chan Response
 }
 
 func (w *WaitGroup) Init() {
@@ -24,33 +25,45 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 		Responder: w,
 	}
 	w.requests = append(w.requests, req)
-	w.wg.Add(1)
 	w.m.Unlock()
 	return req
 }
 
-func (w *WaitGroup) Wait(f func(Response)) {
+func (w *WaitGroup) Results() <-chan Response {
 	w.m.Lock()
-	w.callback = f
+	w.ch = make(chan Response, len(w.requests))
 	for _, resp := range w.responses {
 		w.requests[resp.Id] = nil
-		f(resp)
-		w.wg.Done()
+		w.ch <- resp
+		w.incLocked()
 	}
 	w.responses = nil
 	w.m.Unlock()
-	w.wg.Wait()
+	return w.ch
 }
 
 func (w *WaitGroup) Respond(r Response) {
 	w.m.Lock()
-	defer w.m.Unlock()
-	if w.callback != nil {
-		w.callback(r)
+	if w.ch != nil {
 		w.requests[r.Id] = nil
-		w.wg.Done()
+		w.m.Unlock()
+		w.ch <- r
+		w.inc()
 	} else {
 		w.responses = append(w.responses, r)
+		w.m.Unlock()
+	}
+}
+
+func (w *WaitGroup) inc() {
+	if v := w.c.Incr(); int(v) == len(w.requests) {
+		close(w.ch)
+	}
+}
+
+func (w *WaitGroup) incLocked() {
+	if w.c++; int(w.c) == len(w.requests) {
+		close(w.ch)
 	}
 }
 
@@ -60,7 +73,7 @@ func (w *WaitGroup) Cancel() {
 	for i, req := range w.requests {
 		if req != nil && req.Cancel() {
 			w.requests[i] = nil
-			w.wg.Done()
+			w.incLocked()
 		}
 	}
 }
