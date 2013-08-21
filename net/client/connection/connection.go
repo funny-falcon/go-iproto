@@ -73,6 +73,8 @@ type Connection struct {
 
 	readTimeout  nt.Timeout
 	writeTimeout nt.Timeout
+	readReset    chan bool
+	writeReset    chan bool
 
 	loopNotify chan notifyAction
 }
@@ -87,6 +89,8 @@ func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 
 		readTimeout:  nt.Timeout{Timeout: conf.ReadTimeout, Kind: nt.Read},
 		writeTimeout: nt.Timeout{Timeout: conf.WriteTimeout, Kind: nt.Write},
+		readReset:    make(chan bool, 1),
+		writeReset:   make(chan bool, 1),
 
 		loopNotify: make(chan notifyAction, 2),
 		State: CsNew,
@@ -157,7 +161,17 @@ func (conn *Connection) controlLoop() {
 	var closeReadCalled bool
 	defer conn.controlLoopExit()
 	for {
-		action := <-conn.loopNotify
+		var action notifyAction
+		select {
+		case action = <-conn.loopNotify:
+		case <-conn.readReset:
+			conn.readTimeout.Reset(conn.conn)
+			continue
+		case <-conn.writeReset:
+			conn.writeTimeout.Reset(conn.conn)
+			continue
+		}
+
 		switch action {
 		case writeClosed:
 			conn.State &= CsClosed
@@ -223,7 +237,10 @@ func (conn *Connection) readLoop() {
 	conn.readTimeout.UnFreeze(conn.conn)
 
 	for {
-		conn.readTimeout.Reset(conn.conn)
+		select {
+		case conn.readReset<- true:
+		default:
+		}
 
 		if res, conn.readErr = r.ReadResponse(conn.RetCodeLen); conn.readErr != nil {
 			break
@@ -283,12 +300,8 @@ Loop:
 		var ping bool
 		var requestHeader nt.Request
 
-		conn.writeTimeout.Reset(conn.conn)
-
 		select {
-		case <-conn.ExitChan():
-			conn.shutdown = true
-			break Loop
+		case conn.writeReset<- true:
 		default:
 		}
 
