@@ -17,11 +17,15 @@ type Service interface {
 
 type FuncService func(*Request)
 func (f FuncService) SendWrapped(r *Request) {
-	f(r)
+	if r.SetInFly(nil) {
+		f(r)
+	}
 }
 
 func (f FuncService) Send(r *Request) {
-	f(r)
+	if r.SetInFly(nil) {
+		f(r)
+	}
 }
 
 func (f FuncService) Runned() bool {
