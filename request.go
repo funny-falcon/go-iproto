@@ -53,11 +53,7 @@ func (r *Request) State() uint32 {
 }
 
 func (r *Request) cas(old, new uint32) (set bool){
-	r.Lock()
-	if set = r.state == old; set {
-		r.state = new
-	}
-	r.Unlock()
+	set = atomic.CompareAndSwapUint32(&r.state, old, new)
 	return
 }
 
