@@ -43,16 +43,18 @@ func (w *WaitGroup) Results() <-chan Response {
 }
 
 func (w *WaitGroup) Respond(r Response) {
-	w.m.Lock()
-	if w.ch != nil {
-		w.requests[r.Id] = nil
-		w.m.Unlock()
-		w.ch <- r
-		w.inc()
-	} else {
-		w.responses = append(w.responses, r)
+	if w.ch == nil {
+		w.m.Lock()
+		if w.ch == nil {
+			w.responses = append(w.responses, r)
+			w.m.Unlock()
+			return
+		}
 		w.m.Unlock()
 	}
+	w.requests[r.Id] = nil
+	w.ch <- r
+	w.inc()
 }
 
 func (w *WaitGroup) inc() {
