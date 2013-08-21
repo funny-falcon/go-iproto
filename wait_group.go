@@ -8,6 +8,8 @@ import (
 type WaitGroup struct {
 	m sync.Mutex
 	c util.Atomic
+	bufn int32
+	buf []Request
 	requests []*Request
 	responses []Response
 	ch chan Response
@@ -18,7 +20,16 @@ func (w *WaitGroup) Init() {
 
 func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 	w.m.Lock()
-	req := &Request{
+	if w.buf == nil {
+		w.buf = make([]Request, 16)
+	}
+	req := &w.buf[w.bufn]
+	if w.bufn++; int(w.bufn) == len(w.buf) {
+		w.buf = nil
+		w.bufn = 0
+	}
+
+	*req = Request{
 		Id: uint32(len(w.requests)),
 		Msg: msg,
 		Body: body,
