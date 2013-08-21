@@ -42,7 +42,7 @@ func Run(s EndPoint) {
 	if s.Runned() {
 		log.Panicf("EndPoint already runned ( %v )", s)
 	}
-	ch := make(chan *Request, 256)
+	ch := make(chan *Request, 16 * 1024)
 	s.Run(ch, true)
 }
 
