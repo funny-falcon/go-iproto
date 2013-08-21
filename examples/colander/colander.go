@@ -112,7 +112,10 @@ func main() {
 
 	recur := recurConf.NewServer()
 	colanderTest.Recur = recur
-	colanderTest.SumTest = iproto.FuncService(colanderTest.DoSumTest)
+	colanderTest.SumTest = iproto.NewParallelService(
+		400,
+		iproto.FuncService(colanderTest.DoSumTest),
+	)
 
 	self := serverConf.NewServer()
 	self.Run()
