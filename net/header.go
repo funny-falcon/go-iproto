@@ -104,12 +104,11 @@ func (h *HeaderWriter) Init(r io.Writer) {
 }
 
 func (h *HeaderWriter) WriteRequest(req Request) (err error) {
-	var head [12]byte
-	bin_le.PutUint32(head[:4], uint32(req.Msg))
-	bin_le.PutUint32(head[4:8], uint32(len(req.Body)))
-	bin_le.PutUint32(head[8:12], req.Id)
+	bin_le.PutUint32(h.buf[:4], uint32(req.Msg))
+	bin_le.PutUint32(h.buf[4:8], uint32(len(req.Body)))
+	bin_le.PutUint32(h.buf[8:12], req.Id)
 
-	if _, err = h.w.Write(head[:12]); err == nil {
+	if _, err = h.w.Write(h.buf[:12]); err == nil {
 		_, err = h.w.Write(req.Body)
 	}
 	return
