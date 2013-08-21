@@ -215,10 +215,12 @@ Loop:
 			conn.buf[n] = nt.Response{}
 			n++
 		default:
+			hasOne = true
 			break Loop
 		}
 	}
-	if hasOne = n > 0; hasOne {
+	if n > 0 {
+		hasOne = true
 		conn.buf = conn.buf[n:]
 		if len(conn.buf) == 0 {
 			conn.bufRealCap = 16
