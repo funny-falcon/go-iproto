@@ -65,6 +65,10 @@ func (r *Request) SetPending() (set bool) {
 	return r.cas(RsNew, RsPending)
 }
 
+func (r *Request) IsPending() (set bool) {
+	return atomic.LoadUint32(&r.state) == RsPending
+}
+
 // SetInFly should be called when you going to work with request.
 func (r *Request) SetInFly(res Middleware) (set bool) {
 	r.Lock()
