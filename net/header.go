@@ -100,7 +100,7 @@ type HeaderWriter struct {
 }
 
 func (h *HeaderWriter) Init(r io.Writer) {
-	h.w = bufio.NewWriterSize(r, 16*1024)
+	h.w = bufio.NewWriterSize(r, 64*1024)
 }
 
 func (h *HeaderWriter) WriteRequest(req Request) (err error) {
