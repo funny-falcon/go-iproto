@@ -94,6 +94,7 @@ var recurConf = client.ServerConfig {
 }
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+var memprofile = flag.String("memprofile", "", "write memory profile to file")
 
 func main() {
 	flag.Parse()
@@ -118,4 +119,13 @@ func main() {
 		ch<- true
 	}()
 	<-ch
+
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.WriteHeapProfile(f)
+		f.Close()
+	}
 }

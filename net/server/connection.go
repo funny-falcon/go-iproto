@@ -29,7 +29,9 @@ type Connection struct {
 	Id uint64
 	conn nt.NetConn
 
-	buffer ResponseBuffer
+	buf []nt.Response
+	out chan nt.Response
+	bufRealCap int
 
 	state ConnState
 
@@ -49,6 +51,8 @@ func NewConnection(serv *Server, connection nt.NetConn, id uint64) (conn *Connec
 		Id: id,
 		conn: connection,
 
+		out: make(chan nt.Response, 8),
+
 		inFly: make(map[uint32] *iproto.Request),
 
 		readTimeout:  nt.Timeout{Timeout: serv.ReadTimeout, Kind: nt.Read},
@@ -62,7 +66,6 @@ func NewConnection(serv *Server, connection nt.NetConn, id uint64) (conn *Connec
 }
 
 func (conn *Connection) Run() {
-	conn.buffer.Init()
 	go conn.controlLoop()
 	go conn.readLoop()
 	go conn.writeLoop()
@@ -77,18 +80,18 @@ func (conn *Connection) Respond(r iproto.Response) {
 	conn.Lock()
 	if _, ok = conn.inFly[r.Id]; ok {
 		delete(conn.inFly, r.Id)
-	}
-	if conn.state & CsReadClosed != 0 && len(conn.inFly) == 0 {
-		conn.notifyLoop(inFlyEmpty)
+		select {
+		case conn.out <- nt.Response(r):
+		default:
+			conn.buf = append(conn.buf, nt.Response(r))
+			conn.bufRealCap = cap(conn.buf)
+		}
 	}
 	conn.Unlock()
-	if ok {
-		conn.buffer.in <- nt.Response(r)
-	}
 }
 
-func (conn *Connection) closed() {
-	log.Print("Closed ", conn.Id, conn.conn.RemoteAddr())
+func (conn *Connection) cancelInFly() {
+	log.Print("Canceling ", conn.Id, conn.conn.RemoteAddr())
 	conn.Lock()
 	reqs := make([]*iproto.Request, 0, len(conn.inFly))
 	for _, req := range conn.inFly {
@@ -101,33 +104,39 @@ func (conn *Connection) closed() {
 	conn.Server.connClosed <- conn.Id
 }
 
+func (conn *Connection) closed() {
+	log.Print("Closed ", conn.Id, conn.conn.RemoteAddr())
+	conn.Server.connClosed <- conn.Id
+}
+
 func (conn *Connection) controlLoop() {
 	defer conn.closed()
-	inIsClosed := false
 	for {
 		action := <-conn.loopNotify
 		switch action {
 		case readClosed:
+			conn.Lock()
 			conn.state &= CsClosed
 			conn.state |= CsReadClosed
 			log.Print("Read Closed ", conn.Id, conn.state, conn.conn.RemoteAddr())
+			if len(conn.inFly) + len(conn.buf) + len(conn.out) == 0 {
+				close(conn.out)
+			}
+			conn.Unlock()
 		case writeClosed:
 			conn.state &= CsClosed
 			conn.state |= CsWriteClosed
-			log.Print("Write Closed ", conn.Id, conn.state, conn.conn.RemoteAddr())
+			log.Print("Write Closed ", conn.Id, conn.state, conn.conn.RemoteAddr(), CsClosed)
+			conn.cancelInFly()
 			if conn.state & CsReadClosed == 0 {
 				conn.conn.CloseRead()
 			}
 		case inFlyEmpty:
-			log.Print("InFly Empty", conn.Id, conn.state, conn.conn.RemoteAddr())
-		}
-
-		if !inIsClosed && conn.state & CsReadClosed != 0 && len(conn.inFly) == 0 {
-			inIsClosed = true
-			conn.buffer.CloseIn()
+			close(conn.out)
 		}
 
 		if conn.state & CsClosed == CsClosed {
+			log.Print("Breaking control loop")
 			break
 		}
 	}
@@ -160,7 +169,7 @@ func (conn *Connection) readLoop() {
 				Id: req.Id,
 				Msg: iproto.Ping,
 			}
-			conn.buffer.out <- res
+			conn.out <- res
 			continue
 		}
 
@@ -218,17 +227,42 @@ Loop:
 		var res nt.Response
 		var ok bool
 
+		conn.writeTimeout.Reset(conn.conn)
+
+		Select:
 		select {
-		case res, ok = <-conn.buffer.out:
+		case res, ok = <-conn.out:
 			if !ok {
 				break Loop
 			}
 		default:
+			conn.Lock()
+			if len(conn.buf) > 0 {
+				select {
+				case conn.out <- conn.buf[0]:
+					conn.buf[0] = nt.Response{}
+					conn.buf = conn.buf[1:]
+					if cap(conn.buf) < conn.bufRealCap / 16 {
+						conn.bufRealCap /= 8
+						tmp := make([]nt.Response, len(conn.buf), conn.bufRealCap)
+						copy(tmp, conn.buf)
+						conn.buf = tmp
+					}
+					conn.Unlock()
+					goto Select
+				default:
+				}
+			} else if conn.state & CsReadClosed != 0 && len(conn.inFly) == 0 && len(conn.out) == 0 {
+				conn.Unlock()
+				conn.notifyLoop(inFlyEmpty)
+				break Loop
+			}
+			conn.Unlock()
 			if err = w.Flush(); err != nil {
 				break Loop
 			}
 			conn.writeTimeout.Freeze(conn.conn)
-			if res, ok = <-conn.buffer.out; !ok {
+			if res, ok = <-conn.out; !ok {
 				break Loop
 			}
 		}
