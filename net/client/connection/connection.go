@@ -1,7 +1,6 @@
 package connection
 
 import (
-	"bufio"
 	"github.com/funny-falcon/go-iproto"
 	nt "github.com/funny-falcon/go-iproto/net"
 	"io"
@@ -215,19 +214,18 @@ func (conn *Connection) notifyLoop(action notifyAction) {
 
 func (conn *Connection) readLoop() {
 	var res nt.Response
-	var header nt.HeaderIO
-	header.Init()
+	var r nt.HeaderReader
+	r.Init(conn.conn)
 
 	defer conn.notifyLoop(readClosed)
 	defer conn.readTimeout.Freeze(nil)
 
-	read := bufio.NewReaderSize(conn.conn, 64*1024)
 	conn.readTimeout.UnFreeze(conn.conn)
 
 	for {
 		conn.readTimeout.Reset(conn.conn)
 
-		if res, conn.readErr = header.ReadResponse(read, conn.RetCodeLen); conn.readErr != nil {
+		if res, conn.readErr = r.ReadResponse(conn.RetCodeLen); conn.readErr != nil {
 			break
 		}
 
@@ -252,11 +250,11 @@ const fakePingInterval = 1 * time.Hour
 
 func (conn *Connection) writeLoop() {
 	var err error
-	var header nt.HeaderIO
+	var w nt.HeaderWriter
 	var pingTicker *time.Ticker
 
 
-	write := bufio.NewWriterSize(conn.conn, 16*1024)
+	w.Init(conn.conn)
 
 	if conn.PingInterval > 0 {
 		pingTicker = time.NewTicker(conn.PingInterval)
@@ -269,15 +267,13 @@ func (conn *Connection) writeLoop() {
 		conn.writeTimeout.Freeze(nil)
 		pingTicker.Stop()
 		if err == nil {
-			if err = write.Flush(); err == nil {
+			if err = w.Flush(); err == nil {
 				conn.conn.CloseWrite()
 			}
 		}
 		conn.notifyLoop(writeClosed)
 		conn.ConnErr <- Error{conn, Write, err}
 	}()
-
-	header.Init()
 
 	conn.writeTimeout.UnFreeze(conn.conn)
 Loop:
@@ -302,7 +298,7 @@ Loop:
 			break Loop
 		case request = <-conn.ReceiveChan():
 		default:
-			if err = write.Flush(); err != nil {
+			if err = w.Flush(); err != nil {
 				break Loop
 			}
 			conn.writeTimeout.Freeze(conn.conn)
@@ -334,7 +330,7 @@ Loop:
 			}
 		}
 
-		if err = header.WriteRequest(write, requestHeader); err != nil {
+		if err = w.WriteRequest(requestHeader); err != nil {
 			break
 		}
 	}

@@ -5,7 +5,6 @@ import (
 	nt "github.com/funny-falcon/go-iproto/net"
 	"log"
 	"sync"
-	"bufio"
 )
 var _ = log.Print
 
@@ -141,19 +140,18 @@ func (conn *Connection) notifyLoop(action notifyAction) {
 func (conn *Connection) readLoop() {
 	var req nt.Request
 	var err error
-	var header nt.HeaderIO
-	header.Init()
+	var r nt.HeaderReader
+	r.Init(conn.conn)
 
 	defer conn.notifyLoop(readClosed)
 	defer conn.readTimeout.Freeze(nil)
 
-	read := bufio.NewReaderSize(conn.conn, 64*1024)
 	conn.readTimeout.UnFreeze(conn.conn)
 
 	for {
 		conn.readTimeout.Reset(conn.conn)
 
-		if req, err = header.ReadRequest(read); err != nil {
+		if req, err = r.ReadRequest(); err != nil {
 			break
 		}
 
@@ -199,22 +197,20 @@ func (conn *Connection) safeSend(req *iproto.Request) {
 
 func (conn *Connection) writeLoop() {
 	var err error
-	var header nt.HeaderIO
+	var w nt.HeaderWriter
 
-	write := bufio.NewWriterSize(conn.conn, 16*1024)
+	w.Init(conn.conn)
 
 	defer func() {
 		conn.writeTimeout.Freeze(nil)
 		if err == nil {
-			if err = write.Flush(); err == nil {
+			if err = w.Flush(); err == nil {
 				conn.conn.CloseWrite()
 			}
 		}
 		conn.notifyLoop(writeClosed)
 	}()
 
-
-	header.Init()
 
 	conn.writeTimeout.UnFreeze(conn.conn)
 Loop:
@@ -228,7 +224,7 @@ Loop:
 				break Loop
 			}
 		default:
-			if err = write.Flush(); err != nil {
+			if err = w.Flush(); err != nil {
 				break Loop
 			}
 			conn.writeTimeout.Freeze(conn.conn)
@@ -237,7 +233,7 @@ Loop:
 			}
 		}
 
-		if err = header.WriteResponse(write, res, conn.RetCodeLen); err != nil {
+		if err = w.WriteResponse(res, conn.RetCodeLen); err != nil {
 			break Loop
 		}
 	}
