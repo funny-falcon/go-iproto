@@ -233,7 +233,7 @@ func (conn *Connection) readLoop() {
 			continue
 		}
 
-		req := conn.inFly.get(res.Id)
+		req, row := conn.inFly.get(res.Id)
 		if req == nil {
 			log.Panicf("No mathing request: %v %v", res.Msg, res.Id)
 		}
@@ -242,7 +242,7 @@ func (conn *Connection) readLoop() {
 			ireq.Response(iproto.Response(res), req)
 		}
 
-		conn.inFly.putBack(req)
+		conn.inFly.putBackWithRow(req, row)
 	}
 }
 

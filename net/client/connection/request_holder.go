@@ -57,16 +57,17 @@ func (h *RequestHolder) getNext(conn *Connection) *Request {
 	}
 }
 
-func (h *RequestHolder) get(id uint32) *Request {
-	h.RLock()
-	defer h.RUnlock()
-	var reqs *RequestRow
+func (h *RequestHolder) get(id uint32) (req *Request, reqs *RequestRow) {
 	var ok bool
+	h.RLock()
 	big := util.Atomic(id>>rowLogN)
 	if reqs, ok = h.reqs[big]; !ok {
+		h.RUnlock()
 		log.Panicf("Map has no RequestRow for %d", id)
 	}
-	return &reqs.reqs[id&rowMask]
+	req = &reqs.reqs[id&rowMask]
+	h.RUnlock()
+	return
 }
 
 func (h *RequestHolder) putBack(r *Request) {
@@ -89,6 +90,19 @@ func (h *RequestHolder) putBack(r *Request) {
 		}
 		h.count.Decr()
 	}
+}
+
+func (h *RequestHolder) putBackWithRow(r *Request, reqs *RequestRow) {
+	big := util.Atomic(r.fakeId>>rowLogN)
+	reqs.reqs[r.fakeId&rowMask].fakeId = 0
+	border := big == 0 || big == util.Atomic(iproto.PingRequestId>>8)
+	freed := reqs.freed.Incr()
+	if freed == rowN || (freed == rowN1 && border) {
+		h.Lock()
+		delete(h.reqs, big)
+		h.Unlock()
+	}
+	h.count.Decr()
 }
 
 func (h *RequestHolder) getAll() (reqs []*Request) {
