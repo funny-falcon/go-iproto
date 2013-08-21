@@ -15,6 +15,19 @@ type Service interface {
 	Runned() bool
 }
 
+type FuncService func(*Request)
+func (f FuncService) SendWrapped(r *Request) {
+	f(r)
+}
+
+func (f FuncService) Send(r *Request) {
+	f(r)
+}
+
+func (f FuncService) Runned() bool {
+	return true
+}
+
 type EndPoint interface {
 	Service
 	Run(requests chan *Request, standalone bool)
