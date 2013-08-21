@@ -51,7 +51,7 @@ func NewConnection(serv *Server, connection nt.NetConn, id uint64) (conn *Connec
 		Id: id,
 		conn: connection,
 
-		out: make(chan nt.Response, 8),
+		out: make(chan nt.Response, 128),
 
 		inFly: make(map[uint32] *iproto.Request),
 
@@ -91,7 +91,7 @@ func (conn *Connection) Respond(r iproto.Response) {
 }
 
 func (conn *Connection) cancelInFly() {
-	log.Print("Canceling ", conn.Id, conn.conn.RemoteAddr())
+	log.Print("Canceling ", len(conn.inFly), " requests ", conn.Id, conn.conn.RemoteAddr())
 	conn.Lock()
 	reqs := make([]*iproto.Request, 0, len(conn.inFly))
 	for _, req := range conn.inFly {
@@ -106,6 +106,8 @@ func (conn *Connection) cancelInFly() {
 
 func (conn *Connection) closed() {
 	log.Print("Closed ", conn.Id, conn.conn.RemoteAddr())
+	conn.buf = nil
+	conn.inFly = nil
 	conn.Server.connClosed <- conn.Id
 }
 
@@ -204,6 +206,33 @@ func (conn *Connection) safeSend(req *iproto.Request) {
 	conn.EndPoint.Send(req)
 }
 
+func (conn *Connection) cleanBuffer() (hasOne bool) {
+	n := 0
+Loop:
+	for n < len(conn.buf) {
+		select {
+		case conn.out <- conn.buf[n]:
+			conn.buf[n] = nt.Response{}
+			n++
+		default:
+			break Loop
+		}
+	}
+	if hasOne = n > 0; hasOne {
+		conn.buf = conn.buf[n:]
+		if len(conn.buf) == 0 {
+			conn.bufRealCap = 16
+			conn.buf = make([]nt.Response, 0, 16)
+		} else if len(conn.buf) < conn.bufRealCap / 16 {
+			conn.bufRealCap = len(conn.buf) * 2
+			tmp := make([]nt.Response, len(conn.buf), conn.bufRealCap)
+			copy(tmp, conn.buf)
+			conn.buf = tmp
+		}
+	}
+	return
+}
+
 func (conn *Connection) writeLoop() {
 	var err error
 	var w nt.HeaderWriter
@@ -238,19 +267,9 @@ Loop:
 		default:
 			conn.Lock()
 			if len(conn.buf) > 0 {
-				select {
-				case conn.out <- conn.buf[0]:
-					conn.buf[0] = nt.Response{}
-					conn.buf = conn.buf[1:]
-					if cap(conn.buf) < conn.bufRealCap / 16 {
-						conn.bufRealCap /= 8
-						tmp := make([]nt.Response, len(conn.buf), conn.bufRealCap)
-						copy(tmp, conn.buf)
-						conn.buf = tmp
-					}
+				if conn.cleanBuffer() {
 					conn.Unlock()
 					goto Select
-				default:
 				}
 			} else if conn.state & CsReadClosed != 0 && len(conn.inFly) == 0 && len(conn.out) == 0 {
 				conn.Unlock()
