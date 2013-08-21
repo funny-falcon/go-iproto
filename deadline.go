@@ -31,7 +31,9 @@ func (d *Deadline) Wrap(r *Request) {
 	r.canceled = make(chan bool, 1)
 
 	sendRemains := d.Deadline.Sub(NowEpoch()) - d.WorkTime
-	r.ChainMiddleware(d)
+	if !r.ChainMiddleware(d) {
+		return
+	}
 
 	if sendRemains < 0 {
 		d.sendExpired()

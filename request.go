@@ -147,6 +147,10 @@ func (r *Request) chainResponse(res Response) {
 	}
 	r.Responder.Respond(res)
 	r.state = RsPerformed
+	select {
+	case r.canceled <- true:
+	default:
+	}
 }
 
 func (r *Request) Response(res Response, responder Middleware) {
@@ -157,10 +161,14 @@ func (r *Request) Response(res Response, responder Middleware) {
 	}
 }
 
-func (r *Request) ChainMiddleware(res Middleware) {
+func (r *Request) ChainMiddleware(res Middleware) (chained bool) {
 	r.Lock()
-	res.setReq(r, res)
+	if r.state == RsPending {
+		chained = true
+		res.setReq(r, res)
+	}
 	r.Unlock()
+	return
 }
 
 func (r *Request) UnchainMiddleware(res Middleware) {
