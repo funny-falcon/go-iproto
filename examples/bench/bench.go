@@ -90,7 +90,7 @@ func main() {
 	flag.IntVar(&c, "c", 1, "Num of connections")
 	flag.StringVar(&h, "h", "127.0.0.1", "colander host")
 	flag.IntVar(&p, "p", 8765, "Colander port")
-	flag.IntVar(&action, "a", 1, "Colander port")
+	flag.IntVar(&action, "a", 1, "Action: 1 - sumtest, 2 - echo")
 	flag.Parse()
 
 
