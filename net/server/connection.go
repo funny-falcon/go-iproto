@@ -95,7 +95,7 @@ func (conn *Connection) cancelInFly() {
 	conn.Lock()
 	reqs := make([]*iproto.Request, 0, len(conn.inFly))
 	for _, req := range conn.inFly {
-		reqs[len(reqs)] = req
+		reqs = append(reqs, req)
 	}
 	conn.Unlock()
 	for _, req := range reqs {
