@@ -17,11 +17,15 @@ func (p *ParallelMiddleware) Respond(res Response) Response {
 }
 
 func (p *ParallelMiddleware) Cancel() {
-	p.serv.Lock()
-	p.prev.next = p.next
-	p.next.prev = p.prev
 	p.performed = true
-	p.serv.Unlock()
+	if p.prev != nil {
+		p.serv.Lock()
+		if p.prev != nil {
+			p.prev.next = p.next
+			p.next.prev = p.prev
+		}
+		p.serv.Unlock()
+	}
 }
 
 type ParallelService struct {
@@ -59,6 +63,7 @@ func (serv *ParallelService) Runned() bool {
 func (serv *ParallelService) SendWrapped(r *Request) {
 	serv.Lock()
 	defer serv.Unlock()
+
 	if serv.appended == nil {
 		r.Respond(RcShutdown, nil)
 		return
@@ -75,6 +80,7 @@ func (serv *ParallelService) SendWrapped(r *Request) {
 	}
 	select {
 	case serv.appended <- true:
+	default:
 	}
 }
 
@@ -106,20 +112,21 @@ Loop:
 	}
 }
 
-func (serv *ParallelService) runOne() bool {
+func (serv *ParallelService) runOne() (runned bool) {
 	serv.Lock()
 	defer serv.Unlock()
 
 	next := serv.list.next
-	if next == serv.list.next || next.performed {
+	if next == &serv.list {
 		return false
 	}
 
 	next.prev.next = next.next
 	next.next.prev = next.prev
+	next.prev = nil
+	next.next = nil
 	request := next.Request
-	request.UnchainMiddleware(next)
-	if !request.SetInFly(nil) {
+	if !request.IsPending() {
 		return false
 	}
 	go serv.runRequest(request)
