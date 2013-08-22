@@ -186,24 +186,8 @@ func (conn *Connection) readLoop() {
 		conn.inFly[request.Id] = request
 		conn.Unlock()
 
-		conn.safeSend(request)
+		conn.EndPoint.Send(request)
 	}
-}
-
-func (conn *Connection) sendRescue(req *iproto.Request) {
-	if err := recover(); err != nil {
-		res := iproto.Response{
-			Id: req.Id,
-			Msg: req.Msg,
-			Code: iproto.RcFailed,
-		}
-		req.Response(res, nil)
-	}
-}
-
-func (conn *Connection) safeSend(req *iproto.Request) {
-	defer conn.sendRescue(req)
-	conn.EndPoint.Send(req)
 }
 
 func (conn *Connection) cleanBuffer() (hasOne bool) {
