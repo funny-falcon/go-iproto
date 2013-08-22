@@ -103,16 +103,9 @@ func (h *HeaderWriter) Init(w io.Writer, timeout time.Duration) {
 }
 
 func (h *HeaderWriter) WriteRequest(req Request) (err error) {
-	if err = h.w.WriteUint32(uint32(req.Msg)); err != nil {
-		return
+	if err = h.w.Write3Uint32(uint32(req.Msg), uint32(len(req.Body)), uint32(req.Id)); err == nil {
+		err = h.w.Write(req.Body)
 	}
-	if err = h.w.WriteUint32(uint32(len(req.Body))); err != nil {
-		return
-	}
-	if err = h.w.WriteUint32(uint32(req.Id)); err != nil {
-		return
-	}
-	err = h.w.Write(req.Body)
 	return
 }
 
@@ -122,13 +115,7 @@ func (h *HeaderWriter) WriteResponse(res Response, retCodeLen int) (err error) {
 	}
 
 	body_len := uint32(len(res.Body) + retCodeLen)
-	if err = h.w.WriteUint32(uint32(res.Msg)); err != nil {
-		return
-	}
-	if err = h.w.WriteUint32(uint32(body_len)); err != nil {
-		return
-	}
-	if err = h.w.WriteUint32(uint32(res.Id)); err != nil {
+	if err = h.w.Write3Uint32(uint32(res.Msg), body_len, uint32(res.Id)); err != nil {
 		return
 	}
 

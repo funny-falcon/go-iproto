@@ -42,6 +42,21 @@ func (w *BufWriter) WriteUint32(i uint32) (err error) {
 	return
 }
 
+func (w *BufWriter) Write3Uint32(i, j, k uint32) (err error) {
+	if w.wr + 12 > len(w.buf) {
+		if err = w.Flush(); err != nil {
+			return err
+		}
+	}
+
+	wr := w.wr
+	bin_le.PutUint32(w.buf[wr:wr+4], i)
+	bin_le.PutUint32(w.buf[wr+4:wr+8], j)
+	bin_le.PutUint32(w.buf[wr+8:wr+12], k)
+	w.wr = wr+12
+	return
+}
+
 func (w *BufWriter) WriteByte(i byte) (err error) {
 	if w.wr + 4 > len(w.buf) {
 		if err = w.Flush(); err != nil {
