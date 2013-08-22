@@ -9,7 +9,7 @@ type WaitGroup struct {
 	m sync.Mutex
 	c util.Atomic
 	bufn int32
-	buf []Request
+	buf *[16]Request
 	requests []*Request
 	responses []Response
 	ch chan Response
@@ -21,7 +21,7 @@ func (w *WaitGroup) Init() {
 func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 	w.m.Lock()
 	if w.buf == nil {
-		w.buf = make([]Request, 16)
+		w.buf = &[16]Request{}
 	}
 	req := &w.buf[w.bufn]
 	if w.bufn++; int(w.bufn) == len(w.buf) {
