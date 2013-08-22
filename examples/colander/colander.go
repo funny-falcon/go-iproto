@@ -11,6 +11,7 @@ import (
 	"flag"
 	"runtime/pprof"
 	"os"
+	"os/signal"
 )
 
 var _ = log.Print
@@ -60,8 +61,9 @@ func (s *Service) DoSumTest(r *iproto.Request) {
 	result := iproto.RcOK
 
 	wg.Init()
+	bodies := make([]byte, 4*CHKNUM)
 	for i:=uint32(0); i<CHKNUM; i++ {
-		body := make([]byte, 4)
+		body := bodies[4*i:4*i+4]
 		le.PutUint32(body, i*i)
 		req := wg.Request(OP_TEST, body)
 		s.Recur.Send(req)
@@ -122,11 +124,8 @@ func main() {
 	self.Run()
 	iproto.Run(recur)
 
-	ch := make(chan bool)
-	go func(){
-		os.Stdin.Read(make([]byte, 1))
-		ch<- true
-	}()
+	ch := make(chan os.Signal)
+	signal.Notify(ch, os.Interrupt, os.Kill)
 	<-ch
 
 	if *memprofile != "" {
