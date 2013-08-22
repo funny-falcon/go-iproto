@@ -129,17 +129,17 @@ func main() {
 			locaccum := Accum{Min: ^uint64(0)}
 			locaccum.Add(n)
 			epochs := make([]Epoch, n)
-			for i:=uint32(1); i<=uint32(n); i++ {
-				epochs[i-1] = Epoch{Epoch: iproto.NowEpoch(), Accum: &locaccum}
-				req := iproto.Request{
-					Msg: iproto.RequestType(action),
-					Body: body,
-					Id: i+uint32(n)*j,
-					Responder: &epochs[i-1],
+			const batch = 1024
+			for i:=0; i<n; i+=batch {
+				var wg iproto.WaitGroup
+				wg.Init()
+				for j:=0; j < batch && i+j<n; j++ {
+					epochs[i+j] = Epoch{Epoch: iproto.NowEpoch(), Accum: &locaccum}
+					req := wg.Request(iproto.RequestType(action), body)
+					point.Send(req)
 				}
-				point.Send(&req)
-				if i%1000 == 0 {
-					//runtime.Gosched()
+				for res := range wg.Results() {
+					epochs[i+int(res.Id)].Respond(res)
 				}
 			}
 			locaccum.Wait()
