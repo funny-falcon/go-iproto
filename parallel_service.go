@@ -8,8 +8,14 @@ type ParallelMiddleware struct {
 	BasicResponder
 	serv *ParallelService
 	prev, next *ParallelMiddleware
-	performed bool
+	performing util.Atomic
 }
+
+const (
+	parInit = iota
+	parInFly
+	parFinished
+)
 
 func (p *ParallelMiddleware) Respond(res Response) Response {
 	p.Cancel()
@@ -17,14 +23,20 @@ func (p *ParallelMiddleware) Respond(res Response) Response {
 }
 
 func (p *ParallelMiddleware) Cancel() {
-	p.performed = true
-	if p.prev != nil {
-		p.serv.Lock()
-		if p.prev != nil {
-			p.prev.next = p.next
-			p.next.prev = p.prev
+	for {
+		if p.performing.CAS(parInFly, parFinished) {
+			p.serv.sema <- true
+			break
 		}
-		p.serv.Unlock()
+		if p.performing.CAS(parInit, parFinished) {
+			p.serv.Lock()
+			if p.prev != nil {
+				p.prev.next = p.next
+				p.next.prev = p.prev
+			}
+			p.serv.Unlock()
+			break
+		}
 	}
 }
 
@@ -102,7 +114,7 @@ Loop:
 
 		if !serv.runOne() {
 			serv.sema <- true
-			if serv.appended == nil {
+			if serv.list.next == &serv.list && serv.appended == nil {
 				break Loop
 			}
 			if app := <-serv.appended; !app {
@@ -126,18 +138,9 @@ func (serv *ParallelService) runOne() (runned bool) {
 	next.prev = nil
 	next.next = nil
 	request := next.Request
-	if !request.IsPending() {
+	if !next.performing.CAS(parInit, parInFly) {
 		return false
 	}
-	go serv.runRequest(request)
+	go serv.work.Send(request)
 	return true
-}
-
-func (serv *ParallelService) putSema() {
-	serv.sema <- true
-}
-
-func (serv *ParallelService) runRequest(r *Request) {
-	defer serv.putSema()
-	serv.work.Send(r)
 }
