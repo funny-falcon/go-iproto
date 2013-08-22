@@ -10,6 +10,7 @@ var _ = log.Print
 
 type Deadline struct {
 	BasicResponder
+	BasicCancelChaner
 
 	Deadline     Epoch
 	/* WorkTime is a hint to EndPoint, will Deadline be reached if we send request now.
@@ -28,8 +29,6 @@ const (
 )
 
 func (d *Deadline) Wrap(r *Request) {
-	r.canceled = make(chan bool, 1)
-
 	sendRemains := d.Deadline.Sub(NowEpoch()) - d.WorkTime
 	if !r.ChainMiddleware(d) {
 		return

@@ -13,9 +13,11 @@ type WaitGroup struct {
 	requests []*Request
 	responses []Response
 	ch chan Response
+	cancel chan bool
 }
 
 func (w *WaitGroup) Init() {
+	w.cancel = make(chan bool)
 }
 
 func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
@@ -36,6 +38,7 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 		Responder: w,
 	}
 	w.requests = append(w.requests, req)
+	req.ChainMiddleware(waitGroupMiddleware{w})
 	w.m.Unlock()
 	return req
 }
@@ -83,10 +86,46 @@ func (w *WaitGroup) incLocked() {
 func (w *WaitGroup) Cancel() {
 	w.m.Lock()
 	defer w.m.Unlock()
+	select {
+	case <-w.cancel:
+	default:
+		close(w.cancel)
+	}
 	for i, req := range w.requests {
 		if req != nil && req.Cancel() {
 			w.requests[i] = nil
 			w.incLocked()
 		}
 	}
+}
+
+type waitGroupMiddleware struct {
+	*WaitGroup
+}
+func (w waitGroupMiddleware) Respond(r Response) Response {
+	return r
+}
+func (w waitGroupMiddleware) Cancel() {
+}
+func (w waitGroupMiddleware) valid() bool {
+	return true
+}
+func (w waitGroupMiddleware) setReq(r *Request, m Middleware) {
+	if m != nil {
+		panic("waitGroupMiddleware should be first in chain")
+	}
+}
+func (w waitGroupMiddleware) unchain() Middleware {
+	return nil
+}
+
+func (w waitGroupMiddleware) previous() Middleware {
+	return nil
+}
+func (w waitGroupMiddleware) CancelChan() chan bool {
+	return w.cancel
+}
+func (w waitGroupMiddleware) InitChan() {
+}
+func (w waitGroupMiddleware) CloseChan() {
 }

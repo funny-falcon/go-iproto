@@ -25,9 +25,7 @@ type Request struct {
 	Body     []byte
 	Responder Responder
 	chain    Middleware
-
 	sync.Mutex
-	canceled  chan bool
 }
 
 func (r *Request) SetDeadline(deadline Epoch, worktime time.Duration) {
@@ -44,8 +42,13 @@ func (r *Request) SetTimeout(deadline time.Duration, worktime time.Duration) {
 	}
 }
 
-func (r *Request) CancelChan() <-chan bool {
-	return r.canceled
+func (r *Request) CancelChan() chan bool {
+	for middle := r.chain; middle != nil; middle = middle.previous() {
+		if cancel, ok := middle.(CancelChaner); ok {
+			return cancel.CancelChan()
+		}
+	}
+	return nil
 }
 
 func (r *Request) State() uint32 {
@@ -71,7 +74,7 @@ func (r *Request) SetInFly(res Middleware) (set bool) {
 	if r.state == RsPending {
 		r.state = RsInFly
 		if (res != nil) {
-			res.setReq(r, res)
+			r.chainMiddleware(res)
 		}
 		set = true
 	}
@@ -95,7 +98,7 @@ func (r *Request) ResponseInAMiddle(middle Middleware, res Response) {
 	if r.state == RsCanceled || r.chain != middle {
 		log.Panicf("Try to respond in a middle for response %+v, while it were not in a chain", middle)
 	}
-	middle.unchain()
+	r.unchainMiddleware(middle)
 	r.chainResponse(res)
 }
 
@@ -127,11 +130,7 @@ func (r *Request) chainCancel(middle Middleware) {
 		if (chain == middle) {
 			return
 		}
-		chain = chain.unchain()
-	}
-	select {
-	case r.canceled <- true:
-	default:
+		chain = r.unchainMiddleware(chain)
 	}
 	r.state = RsCanceled
 }
@@ -143,14 +142,12 @@ func (r *Request) chainResponse(res Response) {
 		if r.state != RsPrepared {
 			return
 		}
-		chain = chain.unchain()
+		chain = r.unchainMiddleware(chain)
 	}
 	r.Responder.Respond(res)
 	r.state = RsPerformed
-	select {
-	case r.canceled <- true:
-	default:
-	}
+	r.Responder = nil
+	r.Body = nil
 }
 
 func (r *Request) Response(res Response, responder Middleware) {
@@ -165,18 +162,33 @@ func (r *Request) ChainMiddleware(res Middleware) (chained bool) {
 	r.Lock()
 	if r.state == RsPending {
 		chained = true
-		res.setReq(r, res)
+		r.chainMiddleware(res)
 	}
 	r.Unlock()
 	return
 }
 
+func (r *Request) chainMiddleware(res Middleware) {
+	res.setReq(r, res)
+	if ch, ok := res.(CancelChaner); ok {
+		ch.InitChan()
+	}
+}
+
 func (r *Request) UnchainMiddleware(res Middleware) {
 	r.Lock()
 	if r.chain == res {
-		res.unchain()
+		r.unchainMiddleware(res)
 	}
 	r.Unlock()
+}
+
+func (r *Request) unchainMiddleware(res Middleware) (next Middleware) {
+	next = res.unchain()
+	if ch, ok := res.(CancelChaner); ok {
+		ch.CloseChan()
+	}
+	return
 }
 
 func (r *Request) Respond(code RetCode, body []byte) {

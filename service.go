@@ -140,7 +140,7 @@ func (s *SimplePoint) SendWrapped(r *Request) {
 
 	select {
 	case s.requests <- r:
-	case <-r.canceled:
+	case <-r.CancelChan():
 	}
 }
 
@@ -172,7 +172,7 @@ func (s *SimplePoint) Send(r *Request) {
 
 	select {
 	case s.requests <- r:
-	case <-r.canceled:
+	case <-r.CancelChan():
 	}
 }
 

@@ -52,6 +52,13 @@ type Middleware interface {
 	valid() bool
 	setReq(req *Request, self Middleware)
 	unchain() Middleware
+	previous() Middleware
+}
+
+type CancelChaner interface {
+	CancelChan() chan bool
+	InitChan()
+	CloseChan()
 }
 
 type BasicResponder struct {
@@ -75,6 +82,10 @@ func (r *BasicResponder) unchain() (prev Middleware) {
 	return
 }
 
+func (r *BasicResponder) previous() Middleware {
+	return r.prev
+}
+
 func (r *BasicResponder) valid() bool {
 	return r.Request != nil
 }
@@ -84,4 +95,20 @@ func (r *BasicResponder) Respond(resp Response) Response {
 }
 
 func (r *BasicResponder) Cancel() {
+}
+
+type BasicCancelChaner struct {
+	ch chan bool
+}
+
+func (c *BasicCancelChaner) InitChan() {
+	c.ch = make(chan bool)
+}
+
+func (c *BasicCancelChaner) CancelChan() chan bool {
+	return c.ch
+}
+
+func (c *BasicCancelChaner) CloseChan() {
+	close(c.ch)
 }
