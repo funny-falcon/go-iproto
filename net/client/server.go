@@ -20,8 +20,6 @@ type conf struct {
 type actionKind int
 const (
 	setServ = actionKind(iota+1)
-	setReadTimeout
-	setWriteTimeout
 )
 
 type action struct {
@@ -149,16 +147,6 @@ func (serv *Server) onAction(action action) {
 	case setServ:
 		serv.Connections = action.servs
 		serv.needConns = action.servs
-	case setReadTimeout:
-		serv.ReadTimeout = action.timeout
-		for _, conn := range serv.connections  {
-			conn.SetReadTimeout(action.timeout)
-		}
-	case setWriteTimeout:
-		serv.WriteTimeout = action.timeout
-		for _, conn := range serv.connections  {
-			conn.SetWriteTimeout(action.timeout)
-		}
 	}
 }
 
@@ -193,12 +181,4 @@ func (serv *Server) onConnError(connErr connection.Error) {
 
 func (serv *Server) SetConnections(n int) {
 	serv.actions <- action{ kind: setServ, servs: n }
-}
-
-func (serv *Server) SetReadTimeout(timeout time.Duration) {
-	serv.actions <- action{ kind: setReadTimeout, timeout: timeout }
-}
-
-func (serv *Server) SetWriteTimeout(timeout time.Duration) {
-	serv.actions <- action{ kind: setWriteTimeout, timeout: timeout }
 }

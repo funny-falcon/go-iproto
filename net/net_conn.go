@@ -3,6 +3,7 @@ package net
 import (
 	"io"
 	"net"
+	"time"
 )
 
 type NetConn interface {
@@ -43,4 +44,9 @@ func (r RwcWrapper) LocalAddr() (addr net.Addr) {
 
 func (r RwcWrapper) RemoteAddr() (addr net.Addr) {
 	return
+}
+
+type SetDeadliner interface {
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
 }

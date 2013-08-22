@@ -38,9 +38,6 @@ type Connection struct {
 	inFly  map[uint32] *iproto.Request
 	sync.Mutex
 
-	readTimeout  nt.Timeout
-	writeTimeout nt.Timeout
-
 	loopNotify chan notifyAction
 }
 
@@ -54,9 +51,6 @@ func NewConnection(serv *Server, connection nt.NetConn, id uint64) (conn *Connec
 		out: make(chan nt.Response, 128),
 
 		inFly: make(map[uint32] *iproto.Request),
-
-		readTimeout:  nt.Timeout{Timeout: serv.ReadTimeout, Kind: nt.Read},
-		writeTimeout: nt.Timeout{Timeout: serv.WriteTimeout, Kind: nt.Write},
 
 		state: CsConnected,
 
@@ -152,16 +146,14 @@ func (conn *Connection) readLoop() {
 	var req nt.Request
 	var err error
 	var r nt.HeaderReader
-	r.Init(conn.conn)
+	r.Init(conn.conn, conn.ReadTimeout)
 
 	defer conn.notifyLoop(readClosed)
-	defer conn.readTimeout.Freeze(nil)
 
-	conn.readTimeout.UnFreeze(conn.conn)
+	var buf *[8]iproto.Request
+	var bufn int
 
 	for {
-		conn.readTimeout.Reset(conn.conn)
-
 		if req, err = r.ReadRequest(); err != nil {
 			break
 		}
@@ -175,7 +167,16 @@ func (conn *Connection) readLoop() {
 			continue
 		}
 
-		request := &iproto.Request{
+		if buf == nil {
+			buf = &[8]iproto.Request{}
+		}
+		request := &buf[bufn]
+		if bufn++; bufn == len(buf) {
+			buf = nil
+			bufn = 0
+		}
+
+		*request = iproto.Request{
 			Id: req.Id,
 			Msg: req.Msg,
 			Body: req.Body,
@@ -223,10 +224,9 @@ func (conn *Connection) writeLoop() {
 	var err error
 	var w nt.HeaderWriter
 
-	w.Init(conn.conn)
+	w.Init(conn.conn, conn.WriteTimeout)
 
 	defer func() {
-		conn.writeTimeout.Freeze(nil)
 		if err == nil {
 			if err = w.Flush(); err == nil {
 				conn.conn.CloseWrite()
@@ -236,13 +236,10 @@ func (conn *Connection) writeLoop() {
 	}()
 
 
-	conn.writeTimeout.UnFreeze(conn.conn)
 Loop:
 	for {
 		var res nt.Response
 		var ok bool
-
-		conn.writeTimeout.Reset(conn.conn)
 
 		Select:
 		select {
@@ -266,7 +263,6 @@ Loop:
 			if err = w.Flush(); err != nil {
 				break Loop
 			}
-			conn.writeTimeout.Freeze(conn.conn)
 			if res, ok = <-conn.out; !ok {
 				break Loop
 			}

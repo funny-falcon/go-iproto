@@ -71,11 +71,6 @@ type Connection struct {
 	State        ConnState
 	shutdown     bool
 
-	readTimeout  nt.Timeout
-	writeTimeout nt.Timeout
-	readReset    chan bool
-	writeReset    chan bool
-
 	loopNotify chan notifyAction
 }
 var _ iproto.EndPoint = (*Connection)(nil)
@@ -86,11 +81,6 @@ func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 		Id:    id,
 
 		inFly:        RequestHolder{reqs: make(reqMap)},
-
-		readTimeout:  nt.Timeout{Timeout: conf.ReadTimeout, Kind: nt.Read},
-		writeTimeout: nt.Timeout{Timeout: conf.WriteTimeout, Kind: nt.Write},
-		readReset:    make(chan bool, 1),
-		writeReset:   make(chan bool, 1),
 
 		loopNotify: make(chan notifyAction, 2),
 		State: CsNew,
@@ -137,18 +127,6 @@ func (conn *Connection) RunWithConn(netconn io.ReadWriteCloser) {
 	conn.controlLoop()
 }
 
-func (conn *Connection) SetReadTimeout(t time.Duration) {
-	if conn.State & CsReadClosed == 0 {
-		conn.readTimeout.Set(conn.conn, t)
-	}
-}
-
-func (conn *Connection) SetWriteTimeout(t time.Duration) {
-	if conn.State & CsWriteClosed == 0 {
-		conn.readTimeout.Set(conn.conn, t)
-	}
-}
-
 func (conn *Connection) controlLoopExit() {
 	if conn.State & CsWriteClosed == 0 {
 		conn.Stop()
@@ -161,16 +139,7 @@ func (conn *Connection) controlLoop() {
 	var closeReadCalled bool
 	defer conn.controlLoopExit()
 	for {
-		var action notifyAction
-		select {
-		case action = <-conn.loopNotify:
-		case <-conn.readReset:
-			conn.readTimeout.Reset(conn.conn)
-			continue
-		case <-conn.writeReset:
-			conn.writeTimeout.Reset(conn.conn)
-			continue
-		}
+		action := <-conn.loopNotify
 
 		switch action {
 		case writeClosed:
@@ -229,19 +198,11 @@ func (conn *Connection) notifyLoop(action notifyAction) {
 func (conn *Connection) readLoop() {
 	var res nt.Response
 	var r nt.HeaderReader
-	r.Init(conn.conn)
+	r.Init(conn.conn, conn.ReadTimeout)
 
 	defer conn.notifyLoop(readClosed)
-	defer conn.readTimeout.Freeze(nil)
-
-	conn.readTimeout.UnFreeze(conn.conn)
 
 	for {
-		select {
-		case conn.readReset<- true:
-		default:
-		}
-
 		if res, conn.readErr = r.ReadResponse(conn.RetCodeLen); conn.readErr != nil {
 			break
 		}
@@ -270,8 +231,7 @@ func (conn *Connection) writeLoop() {
 	var w nt.HeaderWriter
 	var pingTicker *time.Ticker
 
-
-	w.Init(conn.conn)
+	w.Init(conn.conn, conn.WriteTimeout)
 
 	if conn.PingInterval > 0 {
 		pingTicker = time.NewTicker(conn.PingInterval)
@@ -281,7 +241,6 @@ func (conn *Connection) writeLoop() {
 	}
 
 	defer func() {
-		conn.writeTimeout.Freeze(nil)
 		pingTicker.Stop()
 		if err == nil {
 			if err = w.Flush(); err == nil {
@@ -292,18 +251,12 @@ func (conn *Connection) writeLoop() {
 		conn.ConnErr <- Error{conn, Write, err}
 	}()
 
-	conn.writeTimeout.UnFreeze(conn.conn)
 Loop:
 	for {
 		var request *iproto.Request
 		var req *Request
 		var ping bool
 		var requestHeader nt.Request
-
-		select {
-		case conn.writeReset<- true:
-		default:
-		}
 
 		select {
 		case <-conn.ExitChan():
@@ -314,7 +267,6 @@ Loop:
 			if err = w.Flush(); err != nil {
 				break Loop
 			}
-			conn.writeTimeout.Freeze(conn.conn)
 			select {
 			case <-pingTicker.C:
 				ping = true
@@ -323,7 +275,6 @@ Loop:
 				conn.shutdown = true
 				break Loop
 			}
-			conn.writeTimeout.UnFreeze(conn.conn)
 		}
 
 		if ping {

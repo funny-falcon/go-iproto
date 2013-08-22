@@ -2,12 +2,16 @@ package net
 
 import (
 	"io"
+	"time"
 )
 
 type SliceReader struct {
-	reader io.Reader
+	r io.Reader
 	size int
 	buf []byte
+	timeout time.Duration
+	d SetDeadliner
+	dChecked bool
 }
 
 func (sl *SliceReader) Read(n int) (res []byte, err error) {
@@ -30,7 +34,7 @@ func (sl *SliceReader) Read(n int) (res []byte, err error) {
 	l := len(buf)
 	for l < n && err == nil {
 		var nn int
-		nn, err = sl.reader.Read(buf[l:cap(buf)])
+		nn, err = sl.r.Read(buf[l:cap(buf)])
 		l += nn
 	}
 	if l >= n {
@@ -56,11 +60,32 @@ func (sl *SliceReader) ReadByte() (res byte, err error) {
 	if cap(buf) == 0 {
 		buf = make([]byte, len(sl.buf), sl.size)
 	}
-	n, err = sl.reader.Read(buf)
+	n, err = sl.r.Read(buf)
 	if n >= 1 {
 		res = buf[0]
 		sl.buf = buf[1:n]
 		err = nil
+	}
+	return
+}
+
+func (sl *SliceReader) read(buf []byte) (n int, err error) {
+	if sl.timeout > 0 {
+		if !sl.dChecked {
+			sl.dChecked = true
+			sl.d, _ = sl.r.(SetDeadliner)
+		}
+		if sl.d != nil {
+			sl.d.SetReadDeadline(time.Now().Add(sl.timeout))
+		}
+	}
+
+	if n, err = sl.r.Read(buf); err != nil {
+		return
+	}
+
+	if sl.timeout > 0 && sl.d != nil {
+		sl.d.SetReadDeadline(time.Time{})
 	}
 	return
 }
