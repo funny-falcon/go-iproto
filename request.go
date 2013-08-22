@@ -69,16 +69,18 @@ func (r *Request) IsPending() (set bool) {
 }
 
 // SetInFly should be called when you going to work with request.
-func (r *Request) SetInFly(res Middleware) (set bool) {
-	r.Lock()
-	if r.state == RsPending {
-		r.state = RsInFly
-		if (res != nil) {
-			r.chainMiddleware(res)
+func (r *Request) SetInFly(mid Middleware) (set bool) {
+	if mid == nil {
+		return r.cas(RsPending, RsInFly)
+	} else {
+		r.Lock()
+		if r.state == RsPending {
+			r.state = RsInFly
+			r.chainMiddleware(mid)
+			set = true
 		}
-		set = true
+		r.Unlock()
 	}
-	r.Unlock()
 	return
 }
 
