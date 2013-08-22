@@ -175,7 +175,7 @@ func (conn *Connection) readLoop() {
 			continue
 		}
 
-		request := iproto.Request{
+		request := &iproto.Request{
 			Id: req.Id,
 			Msg: req.Msg,
 			Body: req.Body,
@@ -183,10 +183,10 @@ func (conn *Connection) readLoop() {
 		}
 		request.SetPending()
 		conn.Lock()
-		conn.inFly[request.Id] = &request
+		conn.inFly[request.Id] = request
 		conn.Unlock()
 
-		conn.safeSend(&request)
+		conn.safeSend(request)
 	}
 }
 
