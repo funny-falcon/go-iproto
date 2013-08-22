@@ -6,7 +6,7 @@ import (
 
 type SliceReader struct {
 	reader io.Reader
-	Size int
+	size int
 	buf []byte
 }
 
@@ -18,10 +18,10 @@ func (sl *SliceReader) Read(n int) (res []byte, err error) {
 	}
 	var buf []byte
 	if cap(sl.buf) < n {
-		if n > sl.Size {
+		if n > sl.size {
 			buf = make([]byte, len(sl.buf), n)
 		} else {
-			buf = make([]byte, len(sl.buf), sl.Size)
+			buf = make([]byte, len(sl.buf), sl.size)
 		}
 		copy(buf, sl.buf)
 	} else {
@@ -54,7 +54,7 @@ func (sl *SliceReader) ReadByte() (res byte, err error) {
 	var buf []byte
 	var n int
 	if cap(buf) == 0 {
-		buf = make([]byte, len(sl.buf), sl.Size)
+		buf = make([]byte, len(sl.buf), sl.size)
 	}
 	n, err = sl.reader.Read(buf)
 	if n >= 1 {

@@ -22,7 +22,7 @@ type HeaderReader struct {
 }
 
 func (h *HeaderReader) Init(conn io.Reader) {
-	h.r = SliceReader{ reader: conn, Size: 16*1024 }
+	h.r = SliceReader{ reader: conn, size: 16*1024 }
 }
 
 func (h *HeaderReader) ReadRequest() (req Request, err error) {
