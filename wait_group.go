@@ -3,6 +3,7 @@ package iproto
 import (
 	"sync"
 	"github.com/funny-falcon/go-iproto/util"
+	"log"
 )
 
 type WaitGroup struct {
@@ -38,7 +39,7 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 		Responder: w,
 	}
 	w.requests = append(w.requests, req)
-	req.ChainMiddleware(waitGroupMiddleware{w})
+	req.chainMiddleware(waitGroupMiddleware{w})
 	w.m.Unlock()
 	return req
 }
@@ -111,8 +112,8 @@ func (w waitGroupMiddleware) valid() bool {
 	return true
 }
 func (w waitGroupMiddleware) setReq(r *Request, m Middleware) {
-	if m != nil {
-		panic("waitGroupMiddleware should be first in chain")
+	if r.chain != nil {
+		log.Panicf("waitGroupMiddleware should be first in chain %+v %+v", m, r.chain)
 	}
 }
 func (w waitGroupMiddleware) unchain() Middleware {
