@@ -15,20 +15,33 @@ type Service interface {
 	Runned() bool
 }
 
-type FuncService func(*Request)
-func (f FuncService) SendWrapped(r *Request) {
+type FuncMiddleService func(*Request)
+func (f FuncMiddleService) SendWrapped(r *Request) {
+	f(r)
+}
+
+func (f FuncMiddleService) Send(r *Request) {
+	f(r)
+}
+
+func (f FuncMiddleService) Runned() bool {
+	return true
+}
+
+type FuncEndService func(*Request)
+func (f FuncEndService) SendWrapped(r *Request) {
 	if r.SetInFly(nil) {
 		f(r)
 	}
 }
 
-func (f FuncService) Send(r *Request) {
+func (f FuncEndService) Send(r *Request) {
 	if r.SetInFly(nil) {
 		f(r)
 	}
 }
 
-func (f FuncService) Runned() bool {
+func (f FuncEndService) Runned() bool {
 	return true
 }
 
