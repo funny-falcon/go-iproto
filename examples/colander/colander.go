@@ -22,40 +22,29 @@ const (
 	CHKNUM = 32
 )
 
-type Service struct {
-	Recur iproto.Service
-	SumTest iproto.Service
-}
-
 var le = binary.LittleEndian
 
-func (s *Service) SendWrapped(r *iproto.Request) {
+var RootService = iproto.FuncMiddleService(func(r *iproto.Request) {
 	switch r.Msg {
 	case OP_TEST:
-		if !r.SetInFly(nil) {
-			return
-		}
-		if len(r.Body) != 4 {
-			r.Respond(RcError, nil)
-		}
-		num := le.Uint32(r.Body)
-		result := make([]byte, 4)
-		le.PutUint32(result, num)
-		r.Respond(iproto.RcOK, result)
+		OpTestService.Send(r)
 	case OP_SUMTEST:
-		s.SumTest.Send(r)
+		SumTestService.Send(r)
 	}
-}
+})
 
-func (s *Service) Send(r *iproto.Request) {
-	s.SendWrapped(r)
-}
+var OpTestService = iproto.FuncEndService(func(r *iproto.Request) {
+	if len(r.Body) != 4 {
+		r.Respond(RcError, nil)
+	}
+	num := le.Uint32(r.Body)
+	result := make([]byte, 4)
+	le.PutUint32(result, num)
+	r.Respond(iproto.RcOK, result)
+})
 
-func (s *Service) Runned() bool {
-	return s.Recur != nil
-}
-
-func (s *Service) DoSumTest(r *iproto.Request) {
+var SumTestService = iproto.NewParallelService(400, SumTestAction)
+var SumTestAction = iproto.FuncEndService(func(r *iproto.Request) {
 	var wg iproto.WaitGroup
 	var sum uint32
 	result := iproto.RcOK
@@ -66,7 +55,7 @@ func (s *Service) DoSumTest(r *iproto.Request) {
 		body := bodies[4*i:4*i+4]
 		le.PutUint32(body, i*i)
 		req := wg.Request(OP_TEST, body)
-		s.Recur.Send(req)
+		ProxyTestService.Send(req)
 	}
 
 	for res := range wg.Results() {
@@ -80,15 +69,15 @@ func (s *Service) DoSumTest(r *iproto.Request) {
 	body := make([]byte, 4)
 	le.PutUint32(body, sum)
 	r.Respond(result, body)
-}
+})
 
-var colanderTest Service
+var ProxyTestService iproto.EndPoint
 
 var serverConf = server.Config {
 	Network: "tcp",
 	Address: ":8766",
 	RetCodeLen: 4,
-	EndPoint: &colanderTest,
+	EndPoint: &RootService,
 }
 
 var recurConf = client.ServerConfig {
@@ -113,16 +102,11 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	recur := recurConf.NewServer()
-	colanderTest.Recur = recur
-	colanderTest.SumTest = iproto.NewParallelService(
-		400,
-		iproto.FuncService(colanderTest.DoSumTest),
-	)
+	ProxyTestService = recurConf.NewServer()
 
 	self := serverConf.NewServer()
 	self.Run()
-	iproto.Run(recur)
+	iproto.Run(ProxyTestService)
 
 	ch := make(chan os.Signal)
 	signal.Notify(ch, os.Interrupt, os.Kill)
