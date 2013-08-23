@@ -58,7 +58,7 @@ var SumTestAction = iproto.FuncEndService(func(r *iproto.Request) {
 		ProxyTestService.Send(req)
 	}
 
-	for res := range wg.Results() {
+	for _, res := range wg.Results() {
 		if res.Code != iproto.RcOK {
 			wg.Cancel()
 			result = RcError
