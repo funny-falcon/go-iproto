@@ -18,7 +18,6 @@ type Deadline struct {
 	   than it will not try to send Request to network */
 	WorkTime time.Duration
 
-	state util.Atomic
 	timer *time.Timer
 }
 
