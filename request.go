@@ -162,7 +162,7 @@ func (r *Request) Response(res Response, responder Middleware) {
 
 func (r *Request) ChainMiddleware(res Middleware) (chained bool) {
 	r.Lock()
-	if r.state == RsPending {
+	if r.state == RsNew || r.state == RsPending {
 		chained = true
 		r.chainMiddleware(res)
 	}
