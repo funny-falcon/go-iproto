@@ -1,8 +1,8 @@
 package iproto
 
 import (
-	"time"
 	"log"
+	"time"
 )
 
 var _ = log.Print
@@ -16,6 +16,7 @@ type Service interface {
 }
 
 type FuncMiddleService func(*Request)
+
 func (f FuncMiddleService) SendWrapped(r *Request) {
 	f(r)
 }
@@ -29,6 +30,7 @@ func (f FuncMiddleService) Runned() bool {
 }
 
 type FuncEndService func(*Request)
+
 func (f FuncEndService) SendWrapped(r *Request) {
 	if r.SetInFly(nil) {
 		f(r)
@@ -55,7 +57,7 @@ func Run(s EndPoint) {
 	if s.Runned() {
 		log.Panicf("EndPoint already runned ( %v )", s)
 	}
-	ch := make(chan *Request, 16 * 1024)
+	ch := make(chan *Request, 16*1024)
 	s.Run(ch, true)
 }
 
@@ -73,12 +75,13 @@ func Run(s EndPoint) {
 //	       /* custom logick */
 //       }
 type SimplePoint struct {
-	requests chan *Request
-	exit     chan bool
-	isStandalone  bool
-	Timeout  time.Duration
-	Worktime time.Duration
+	requests     chan *Request
+	exit         chan bool
+	isStandalone bool
+	Timeout      time.Duration
+	Worktime     time.Duration
 }
+
 var _ EndPoint = (*SimplePoint)(nil)
 
 func (s *SimplePoint) Runned() bool {

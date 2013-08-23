@@ -2,9 +2,9 @@ package iproto
 
 import (
 	"log"
-	"time"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // RequestType is a iproto request tag which goes fiRst in a packet
@@ -19,12 +19,12 @@ const (
 )
 
 type Request struct {
-	Msg      RequestType
-	Id       uint32
-	state    uint32
-	Body     []byte
+	Msg       RequestType
+	Id        uint32
+	state     uint32
+	Body      []byte
 	Responder Responder
-	chain    Middleware
+	chain     Middleware
 	sync.Mutex
 }
 
@@ -55,7 +55,7 @@ func (r *Request) State() uint32 {
 	return r.state
 }
 
-func (r *Request) cas(old, new uint32) (set bool){
+func (r *Request) cas(old, new uint32) (set bool) {
 	set = atomic.CompareAndSwapUint32(&r.state, old, new)
 	return
 }
@@ -87,7 +87,7 @@ func (r *Request) SetInFly(mid Middleware) (set bool) {
 func (r *Request) Cancel() bool {
 	r.Lock()
 	defer r.Unlock()
-	if r.state == RsNew || r.state & (RsPending | RsInFly) != 0 {
+	if r.state == RsNew || r.state&(RsPending|RsInFly) != 0 {
 		r.chainCancel(nil)
 		return true
 	}
@@ -108,7 +108,7 @@ func (r *Request) ResponseInAMiddle(middle Middleware, res Response) {
    Note, that Canceler callback could be not called yet at this point of time.
    Also, only positive answer is trustful, since some could call Cancel() just
    after this function returns
-   */
+*/
 func (r *Request) Canceled() bool {
 	st := atomic.LoadUint32(&r.state)
 	return st == RsToCancel || st == RsCanceled
@@ -129,7 +129,7 @@ func (r *Request) chainCancel(middle Middleware) {
 	r.state = RsToCancel
 	for chain := r.chain; chain != nil; {
 		chain.Cancel()
-		if (chain == middle) {
+		if chain == middle {
 			return
 		}
 		chain = r.unchainMiddleware(chain)
@@ -194,11 +194,11 @@ func (r *Request) unchainMiddleware(res Middleware) (next Middleware) {
 }
 
 func (r *Request) Respond(code RetCode, body []byte) {
-	r.Response(Response{ Id: r.Id, Msg: r.Msg, Code: code, Body: body }, nil)
+	r.Response(Response{Id: r.Id, Msg: r.Msg, Code: code, Body: body}, nil)
 }
 
 const (
-	RsNew = uint32(0)
+	RsNew     = uint32(0)
 	RsPending = uint32(1 << iota)
 	RsInFly
 	RsPrepared

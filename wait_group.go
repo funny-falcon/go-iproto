@@ -1,9 +1,9 @@
 package iproto
 
 import (
-	"sync"
 	"github.com/funny-falcon/go-iproto/util"
 	"log"
+	"sync"
 )
 
 const (
@@ -13,15 +13,15 @@ const (
 )
 
 type WaitGroup struct {
-	m sync.Mutex
-	c util.Atomic
-	reqn int32
-	requests []*[16]Request
+	m         sync.Mutex
+	c         util.Atomic
+	reqn      int32
+	requests  []*[16]Request
 	responses []Response
-	cancel chan bool
-	ch chan Response
-	w sync.Mutex
-	kind int32
+	cancel    chan bool
+	ch        chan Response
+	w         sync.Mutex
+	kind      int32
 }
 
 func (w *WaitGroup) Init() {
@@ -30,15 +30,15 @@ func (w *WaitGroup) Init() {
 
 func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 	w.m.Lock()
-	if w.reqn % 16 == 0 {
+	if w.reqn%16 == 0 {
 		w.requests = append(w.requests, &[16]Request{})
 	}
 
 	req := &(*w.requests[w.reqn/16])[w.reqn%16]
 	*req = Request{
-		Id: uint32(len(w.requests)),
-		Msg: msg,
-		Body: body,
+		Id:        uint32(len(w.requests)),
+		Msg:       msg,
+		Body:      body,
 		Responder: w,
 	}
 	w.reqn++
@@ -148,6 +148,7 @@ func (w *WaitGroup) Cancel() {
 type waitGroupMiddleware struct {
 	*WaitGroup
 }
+
 func (w waitGroupMiddleware) Respond(r Response) Response {
 	return r
 }

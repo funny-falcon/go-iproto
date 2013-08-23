@@ -1,13 +1,13 @@
 package iproto
 
 import (
-	"sync"
 	"github.com/funny-falcon/go-iproto/util"
+	"sync"
 )
 
 type ParallelMiddleware struct {
 	BasicResponder
-	serv *ParallelService
+	serv       *ParallelService
 	prev, next *ParallelMiddleware
 	performing util.Atomic
 }
@@ -43,26 +43,26 @@ func (p *ParallelMiddleware) Cancel() {
 
 type ParallelService struct {
 	sync.Mutex
-	work Service
-	runned bool
+	work     Service
+	runned   bool
 	appended chan bool
-	list ParallelMiddleware
-	sema  chan bool
+	list     ParallelMiddleware
+	sema     chan bool
 }
 
 func NewParallelService(n int, work Service) (serv *ParallelService) {
 	if n == 0 {
 		n = 1
 	}
-	serv = &ParallelService {
-		work: work,
-		runned: true,
+	serv = &ParallelService{
+		work:     work,
+		runned:   true,
 		appended: make(chan bool, 1),
-		sema: make(chan bool, n),
+		sema:     make(chan bool, n),
 	}
 	serv.list.next = &serv.list
 	serv.list.prev = &serv.list
-	for i:=0; i<n; i++ {
+	for i := 0; i < n; i++ {
 		serv.sema <- true
 	}
 	go serv.loop()
@@ -81,7 +81,7 @@ func (serv *ParallelService) SendWrapped(r *Request) {
 		r.Respond(RcShutdown, nil)
 		return
 	}
-	middle := &ParallelMiddleware {
+	middle := &ParallelMiddleware{
 		serv: serv,
 		prev: serv.list.prev,
 		next: &serv.list,

@@ -10,7 +10,7 @@ type RetCode uint32
 // RcIOError - socket were disconnected before answere arrives
 // RcCanceled - ...
 const (
-	RcOK          = RetCode(0)
+	RcOK       = RetCode(0)
 	RcShutdown = ^RetCode(0) - iota
 	RcProtocolError
 	RcFailed
@@ -19,11 +19,11 @@ const (
 	RcRecvTimeout
 	RcIOError
 	RcRestartable = RcShutdown - 512
-	RcInvalid = RcRestartable
+	RcInvalid     = RcRestartable
 )
 
 type Response struct {
-	Msg RequestType
+	Msg  RequestType
 	Id   uint32
 	Code RetCode
 	Body []byte
@@ -42,6 +42,7 @@ type Responder interface {
 }
 
 type Callback func(Response)
+
 func (f Callback) Respond(r Response) {
 	f(r)
 }
@@ -63,7 +64,7 @@ type CancelChaner interface {
 
 type BasicResponder struct {
 	Request *Request
-	prev Middleware
+	prev    Middleware
 }
 
 // Chain integrates BasicResponder into callback chain

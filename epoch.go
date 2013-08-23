@@ -45,7 +45,7 @@ func (e Epoch) Zero() bool {
 }
 
 func (e Epoch) WillExpire(after time.Duration) bool {
-	return e > 0 && e - Epoch(after) < NowEpoch()
+	return e > 0 && e-Epoch(after) < NowEpoch()
 }
 
 func (e Epoch) String() string {

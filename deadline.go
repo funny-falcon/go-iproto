@@ -12,18 +12,18 @@ type Deadline struct {
 	BasicResponder
 	BasicCancelChaner
 
-	Deadline     Epoch
+	Deadline Epoch
 	/* WorkTime is a hint to EndPoint, will Deadline be reached if we send request now.
 	   If set, then sender will check: if Deadline - TypicalWorkTime is already expired,
 	   than it will not try to send Request to network */
 	WorkTime time.Duration
 
 	state util.Atomic
-	timer  *time.Timer
+	timer *time.Timer
 }
 
 const (
-	dsNil  = util.Atomic(iota)
+	dsNil = util.Atomic(iota)
 	dsCanceling
 	dsResponding
 )
@@ -52,7 +52,7 @@ func (d *Deadline) sendExpired() {
 	if d.Request == r {
 		state := r.State()
 		if state == RsNew || state == RsPending {
-			res := Response { Id: r.Id, Msg: r.Msg, Code: RcSendTimeout }
+			res := Response{Id: r.Id, Msg: r.Msg, Code: RcSendTimeout}
 			r.ResponseInAMiddle(d, res)
 		} else if state == RsPrepared || state == RsPerformed {
 			return
@@ -68,7 +68,7 @@ func (d *Deadline) sendExpired() {
 
 func (d *Deadline) doRecvExpired() {
 	r := d.Request
-	res := Response { Id: r.Id, Msg: r.Msg, Code: RcRecvTimeout }
+	res := Response{Id: r.Id, Msg: r.Msg, Code: RcRecvTimeout}
 	r.ResponseInAMiddle(d, res)
 }
 
