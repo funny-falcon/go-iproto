@@ -166,11 +166,11 @@ func (conn *Connection) controlLoop() {
 }
 
 func (conn *Connection) putInFly(request *iproto.Request) *Request {
-	req := conn.inFly.getNext(conn)
+	req, row := conn.inFly.getNext(conn)
 	if request.SetInFly(req) {
 		return req
 	}
-	conn.inFly.putBack(req)
+	conn.inFly.putBack(req, row)
 	return nil
 }
 
@@ -220,7 +220,7 @@ func (conn *Connection) readLoop() {
 			ireq.Response(iproto.Response(res), req)
 		}
 
-		conn.inFly.putBackWithRow(req, row)
+		conn.inFly.putBack(req, row)
 	}
 }
 
@@ -267,6 +267,7 @@ Loop:
 			if err = w.Flush(); err != nil {
 				break Loop
 			}
+			//time.Sleep(2*time.Millisecond)
 			select {
 			case <-pingTicker.C:
 				ping = true

@@ -27,10 +27,9 @@ type RequestHolder struct {
 	reqs reqMap
 }
 
-func (h *RequestHolder) getNext(conn *Connection) *Request {
+func (h *RequestHolder) getNext(conn *Connection) (req *Request, reqs *RequestRow) {
 	h.count.Incr()
 	for {
-		var reqs *RequestRow
 		var ok bool
 		id := h.curId.Incr()
 		big := id>>rowLogN
@@ -46,13 +45,13 @@ func (h *RequestHolder) getNext(conn *Connection) *Request {
 			h.Unlock()
 		}
 		if id != 0 && id != util.Atomic(iproto.PingRequestId) {
-			req := &reqs.reqs[id&rowMask]
+			req = &reqs.reqs[id&rowMask]
 			if req.fakeId != 0 {
 				continue
 			}
 			req.fakeId = uint32(id)
 			reqs.used.Incr()
-			return req
+			return
 		}
 	}
 }
@@ -70,29 +69,7 @@ func (h *RequestHolder) get(id uint32) (req *Request, reqs *RequestRow) {
 	return
 }
 
-func (h *RequestHolder) putBack(r *Request) {
-	if r.fakeId != 0 {
-		var reqs *RequestRow
-		var ok bool
-		big := util.Atomic(r.fakeId>>rowLogN)
-		h.RLock()
-		if reqs, ok = h.reqs[big]; !ok {
-			log.Panicf("Map has no RequestRow for %d", r.fakeId)
-		}
-		h.RUnlock()
-		reqs.reqs[r.fakeId&rowMask].fakeId = 0
-		border := big == 0 || big == util.Atomic(iproto.PingRequestId>>8)
-		freed := reqs.freed.Incr()
-		if freed == rowN || (freed == rowN1 && border) {
-			h.Lock()
-			delete(h.reqs, big)
-			h.Unlock()
-		}
-		h.count.Decr()
-	}
-}
-
-func (h *RequestHolder) putBackWithRow(r *Request, reqs *RequestRow) {
+func (h *RequestHolder) putBack(r *Request, reqs *RequestRow) {
 	big := util.Atomic(r.fakeId>>rowLogN)
 	reqs.reqs[r.fakeId&rowMask].fakeId = 0
 	border := big == 0 || big == util.Atomic(iproto.PingRequestId>>8)
