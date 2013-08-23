@@ -150,7 +150,7 @@ func (conn *Connection) readLoop() {
 
 	defer conn.notifyLoop(readClosed)
 
-	var buf *[8]iproto.Request
+	var buf *[16]iproto.Request
 	var bufn int
 
 	for {
@@ -168,7 +168,7 @@ func (conn *Connection) readLoop() {
 		}
 
 		if buf == nil {
-			buf = &[8]iproto.Request{}
+			buf = &[16]iproto.Request{}
 		}
 		request := &buf[bufn]
 		if bufn++; bufn == len(buf) {
