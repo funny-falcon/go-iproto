@@ -26,6 +26,7 @@ type Request struct {
 	Responder Responder
 	chain     Middleware
 	sync.Mutex
+	timer     *time.Timer
 }
 
 func (r *Request) SetDeadline(deadline Epoch, worktime time.Duration) {
@@ -35,20 +36,33 @@ func (r *Request) SetDeadline(deadline Epoch, worktime time.Duration) {
 	}
 }
 
-func (r *Request) SetTimeout(deadline time.Duration, worktime time.Duration) {
-	if deadline > 0 {
-		d := Deadline{Deadline: NowEpoch().Add(deadline), WorkTime: worktime}
+func (r *Request) SetTimeout(timeout time.Duration, worktime time.Duration) {
+	if timeout > 0 {
+		d := Deadline{Deadline: NowEpoch().Add(timeout), WorkTime: worktime}
 		d.Wrap(r)
 	}
 }
 
-func (r *Request) CancelChan() chan bool {
-	for middle := r.chain; middle != nil; middle = middle.previous() {
-		if cancel, ok := middle.(CancelChaner); ok {
-			return cancel.CancelChan()
-		}
+func (r *Request) SetITimeout(timeout time.Duration) {
+	if timeout > 0 && r.timer == nil {
+		r.timer = time.AfterFunc(timeout, r.sendExpired)
 	}
-	return nil
+}
+
+func (r *Request) sendExpired() {
+	state := atomic.LoadUint32(&r.state)
+	for state == RsNew || state&(RsPending|RsInFly) != 0 {
+		r.Lock()
+		if state != r.state {
+			state = r.state
+			r.Unlock()
+			continue
+		}
+		defer r.Unlock()
+		r.chainCancel(nil)
+		res := Response{Id: r.Id, Msg: r.Msg, Code: RcSendTimeout}
+		r.Responder.Respond(res)
+	}
 }
 
 func (r *Request) State() uint32 {
@@ -95,12 +109,13 @@ func (r *Request) Cancel() bool {
 }
 
 func (r *Request) ResponseInAMiddle(middle Middleware, res Response) {
-	r.state = RsToCancel
 	r.chainCancel(middle)
-	if r.state == RsCanceled || r.chain != middle {
+	if middle != nil && (r.state == RsCanceled || r.chain != middle) {
 		log.Panicf("Try to respond in a middle for response %+v, while it were not in a chain", middle)
 	}
-	r.unchainMiddleware(middle)
+	if middle != nil {
+		r.unchainMiddleware(middle)
+	}
 	r.chainResponse(res)
 }
 
@@ -135,6 +150,9 @@ func (r *Request) chainCancel(middle Middleware) {
 		chain = r.unchainMiddleware(chain)
 	}
 	r.state = RsCanceled
+	if r.timer != nil {
+		r.timer.Stop()
+	}
 }
 
 func (r *Request) chainResponse(res Response) {
@@ -150,6 +168,9 @@ func (r *Request) chainResponse(res Response) {
 	r.state = RsPerformed
 	r.Responder = nil
 	r.Body = nil
+	if r.timer != nil {
+		r.timer.Stop()
+	}
 }
 
 func (r *Request) Response(res Response, responder Middleware) {
