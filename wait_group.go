@@ -15,9 +15,8 @@ const (
 type WaitGroup struct {
 	m sync.Mutex
 	c util.Atomic
-	bufn int32
-	buf *[16]Request
-	requests []*Request
+	reqn int32
+	requests []*[16]Request
 	responses []Response
 	cancel chan bool
 	ch chan Response
@@ -31,22 +30,18 @@ func (w *WaitGroup) Init() {
 
 func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 	w.m.Lock()
-	if w.buf == nil {
-		w.buf = &[16]Request{}
-	}
-	req := &w.buf[w.bufn]
-	if w.bufn++; int(w.bufn) == len(w.buf) {
-		w.buf = nil
-		w.bufn = 0
+	if w.reqn % 16 == 0 {
+		w.requests = append(w.requests, &[16]Request{})
 	}
 
+	req := &(*w.requests[w.reqn/16])[w.reqn%16]
 	*req = Request{
 		Id: uint32(len(w.requests)),
 		Msg: msg,
 		Body: body,
 		Responder: w,
 	}
-	w.requests = append(w.requests, req)
+	w.reqn++
 	req.chainMiddleware(waitGroupMiddleware{w})
 	w.m.Unlock()
 	return req
@@ -55,7 +50,7 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 func (w *WaitGroup) Each() <-chan Response {
 	w.m.Lock()
 	w.kind = wgChan
-	w.ch = make(chan Response, len(w.requests))
+	w.ch = make(chan Response, w.reqn)
 	select {
 	case <-w.cancel:
 		w.m.Unlock()
@@ -78,9 +73,8 @@ func (w *WaitGroup) Each() <-chan Response {
 func (w *WaitGroup) Results() []Response {
 	w.m.Lock()
 	w.kind = wgWait
-	l := len(w.requests)
-	if cap(w.responses) < l {
-		tmp := make([]Response, len(w.responses), l)
+	if cap(w.responses) < int(w.reqn) {
+		tmp := make([]Response, len(w.responses), w.reqn)
 		copy(tmp, w.responses)
 		w.responses = tmp
 	}
@@ -95,7 +89,6 @@ func (w *WaitGroup) Results() []Response {
 }
 
 func (w *WaitGroup) Respond(r Response) {
-	w.requests[r.Id] = nil
 	if w.ch == nil {
 		w.m.Lock()
 		if w.ch == nil {
@@ -111,7 +104,7 @@ func (w *WaitGroup) Respond(r Response) {
 }
 
 func (w *WaitGroup) inc() {
-	if v := w.c.Incr(); int(v) == len(w.requests) {
+	if v := w.c.Incr(); int32(v) == w.reqn {
 		w.m.Lock()
 		switch w.kind {
 		case wgChan:
@@ -124,7 +117,7 @@ func (w *WaitGroup) inc() {
 }
 
 func (w *WaitGroup) incLocked() {
-	if w.c++; int(w.c) == len(w.requests) {
+	if w.c++; int32(w.c) == w.reqn {
 		switch w.kind {
 		case wgChan:
 			close(w.ch)
@@ -142,10 +135,12 @@ func (w *WaitGroup) Cancel() {
 	default:
 		close(w.cancel)
 	}
-	for i, req := range w.requests {
-		if req != nil && req.Cancel() {
-			w.requests[i] = nil
-			w.incLocked()
+	for _, reqs := range w.requests {
+		for i := range reqs {
+			req := &reqs[i]
+			if req.state != RsNew && req.Cancel() {
+				w.incLocked()
+			}
 		}
 	}
 }
