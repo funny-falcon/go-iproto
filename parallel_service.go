@@ -2,6 +2,7 @@ package iproto
 
 import (
 	"sync"
+	"github.com/funny-falcon/go-iproto/util"
 )
 
 type ParallelMiddleware struct {
