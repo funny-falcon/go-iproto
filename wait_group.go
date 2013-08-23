@@ -12,11 +12,15 @@ const (
 	wgWait
 )
 
+const (
+	wgBufSize = 16
+)
+
 type WaitGroup struct {
 	m         sync.Mutex
 	c         util.Atomic
 	reqn      int32
-	requests  []*[16]Request
+	requests  []*[wgBufSize]Request
 	responses []Response
 	cancel    chan bool
 	ch        chan Response
@@ -30,11 +34,11 @@ func (w *WaitGroup) Init() {
 
 func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 	w.m.Lock()
-	if w.reqn%16 == 0 {
-		w.requests = append(w.requests, &[16]Request{})
+	if w.reqn%wgBufSize == 0 {
+		w.requests = append(w.requests, &[wgBufSize]Request{})
 	}
 
-	req := &(*w.requests[w.reqn/16])[w.reqn%16]
+	req := &(*w.requests[w.reqn/wgBufSize])[w.reqn%wgBufSize]
 	*req = Request{
 		Id:        uint32(len(w.requests)),
 		Msg:       msg,
