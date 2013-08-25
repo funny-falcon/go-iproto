@@ -26,7 +26,7 @@ type Request struct {
 	Responder Responder
 	chain     Middleware
 	sync.Mutex
-	timer     *time.Timer
+	timer     Timer
 }
 
 func (r *Request) SetDeadline(deadline Epoch, worktime time.Duration) {
@@ -44,12 +44,14 @@ func (r *Request) SetTimeout(timeout time.Duration, worktime time.Duration) {
 }
 
 func (r *Request) SetITimeout(timeout time.Duration) {
-	if timeout > 0 && r.timer == nil {
-		r.timer = time.AfterFunc(timeout, r.sendExpired)
+	if timeout > 0 && r.timer.E == nil {
+		r.timer.E = r
+		r.timer.After(timeout)
 	}
 }
 
-func (r *Request) sendExpired() {
+//func (r *Request) sendExpired() {
+func (r *Request) Expire() {
 	state := atomic.LoadUint32(&r.state)
 	for state == RsNew || state&(RsPending|RsInFly) != 0 {
 		r.Lock()
@@ -150,9 +152,7 @@ func (r *Request) chainCancel(middle Middleware) {
 		chain = r.unchainMiddleware(chain)
 	}
 	r.state = RsCanceled
-	if r.timer != nil {
-		r.timer.Stop()
-	}
+	r.timer.Stop()
 }
 
 func (r *Request) chainResponse(res Response) {
@@ -168,9 +168,7 @@ func (r *Request) chainResponse(res Response) {
 	r.state = RsPerformed
 	r.Responder = nil
 	r.Body = nil
-	if r.timer != nil {
-		r.timer.Stop()
-	}
+	r.timer.Stop()
 }
 
 func (r *Request) Response(res Response, responder Middleware) {
