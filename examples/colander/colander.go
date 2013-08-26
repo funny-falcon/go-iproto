@@ -43,8 +43,9 @@ var OpTestService = iproto.FuncEndService(func(r *iproto.Request) {
 	r.Respond(iproto.RcOK, result)
 })
 
-var SumTestService = iproto.NewParallelService(400, SumTestAction)
-var SumTestAction = iproto.FuncEndService(func(r *iproto.Request) {
+var in_count = 0
+var bad_count = 0
+var SumTestService = iproto.NewParallelService(256, func(r *iproto.Request) {
 	var wg iproto.WaitGroup
 	var sum uint32
 	result := iproto.RcOK
