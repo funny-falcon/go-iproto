@@ -49,13 +49,18 @@ func (p* parMiddle) Cancel() {
 }
 
 func (serv *ParallelService) Loop() {
+	var req *Request
+	var ok bool
 	var buf *[16]parMiddle
 	var bufn int
 Loop:
 	for {
-		var req *Request
-		var ok bool
-		if req, ok = <-serv.ReceiveChan(); !ok {
+		select {
+		case req, ok = <-serv.ReceiveChan():
+			if !ok {
+				break Loop
+			}
+		case <-serv.ExitChan():
 			break Loop
 		}
 
@@ -71,12 +76,25 @@ Loop:
 			bufn = 0
 		}
 
-		<-serv.sema
+		select {
+		case <-serv.sema:
+		case <-serv.ExitChan():
+			req.Respond(RcShutdown, nil)
+			break Loop
+		}
+
 		if req.SetInFly(mid) {
 			go serv.f(req)
 		} else {
 			serv.sema <- true
 		}
+	}
+
+	for {
+		if req, ok = <-serv.ReceiveChan(); !ok {
+			break
+		}
+		req.Respond(RcShutdown, nil)
 	}
 }
 
