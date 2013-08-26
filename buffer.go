@@ -16,8 +16,12 @@ func (b *Buffer) loop() {
 Loop:
 	for {
 		if first, ok := b.shift(); ok {
+			req := first.Request
+			if req == nil || !req.UnchainMiddleware(first) {
+				continue Loop
+			}
 			for {
-				if first.Request == nil || !first.Request.IsPending() {
+				if !req.IsPending() {
 					continue Loop
 				}
 				select {
@@ -27,7 +31,7 @@ Loop:
 					} else {
 						b.in = nil
 					}
-				case b.out <- first.Request:
+				case b.out <- req:
 					continue Loop
 				}
 			}
@@ -65,14 +69,14 @@ func (b *Buffer) push(r *Request) {
 		buf = &b.buf[l]
 	}
 	*buf = append(*buf, BasicResponder{})
-	r.chainMiddleware(&(*buf)[len(*buf)-1])
+	r.ChainMiddleware(&(*buf)[len(*buf)-1])
 }
 
-func (b *Buffer) shift() (br BasicResponder, ok bool) {
+func (b *Buffer) shift() (br *BasicResponder, ok bool) {
 	if len(b.buf) > 0 {
 		buf := &b.buf[0]
 		if len(*buf) > 0 {
-			br, ok = (*buf)[0], true
+			br, ok = &(*buf)[0], true
 			*buf = (*buf)[1:]
 			if cap(*buf) == 0 {
 				b.buf = b.buf[1:]

@@ -193,12 +193,14 @@ func (r *Request) chainMiddleware(res Middleware) {
 	res.setReq(r, res)
 }
 
-func (r *Request) UnchainMiddleware(res Middleware) {
+func (r *Request) UnchainMiddleware(res Middleware) (un bool) {
 	r.Lock()
 	if r.chain == res {
+		un = true
 		r.unchainMiddleware(res)
 	}
 	r.Unlock()
+	return
 }
 
 func (r *Request) unchainMiddleware(res Middleware) (next Middleware) {
