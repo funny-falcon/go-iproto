@@ -60,9 +60,9 @@ func (r *Request) Expire() {
 			r.Unlock()
 			continue
 		}
-		defer r.Unlock()
 		r.chainCancel(nil)
 		res := Response{Id: r.Id, Msg: r.Msg, Code: RcSendTimeout}
+		r.Unlock()
 		r.Responder.Respond(res)
 	}
 }
@@ -101,11 +101,13 @@ func (r *Request) SetInFly(mid Middleware) (set bool) {
 }
 
 func (r *Request) Cancel() bool {
-	r.Lock()
-	defer r.Unlock()
 	if r.state == RsNew || r.state&(RsPending|RsInFly) != 0 {
-		r.chainCancel(nil)
-		return true
+		r.Lock()
+		defer r.Unlock()
+		if r.state == RsNew || r.state&(RsPending|RsInFly) != 0 {
+			r.chainCancel(nil)
+			return true
+		}
 	}
 	return false
 }
@@ -146,7 +148,7 @@ func (r *Request) chainCancel(middle Middleware) {
 	r.state = RsToCancel
 	for chain := r.chain; chain != nil; {
 		chain.Cancel()
-		if chain == middle {
+		if middle != nil && chain == middle {
 			return
 		}
 		chain = r.unchainMiddleware(chain)
