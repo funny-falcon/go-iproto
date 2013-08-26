@@ -182,7 +182,7 @@ func (conn *Connection) readLoop() {
 			Body: req.Body,
 			Responder: conn,
 		}
-		request.SetPending()
+		//request.SetPending()
 		conn.Lock()
 		conn.inFly[request.Id] = request
 		conn.Unlock()
