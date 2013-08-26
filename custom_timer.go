@@ -20,7 +20,13 @@ type Timer struct {
 }
 
 func (t *Timer) After(d time.Duration) {
-	h := nextHeap()
+	var h *tHeap
+	if t.h == 0 {
+		h = nextHeap()
+		t.h = h.i
+	} else {
+		h = getHeap(t.h)
+	}
 	h.m.Lock()
 	top := h.push(t, NowEpoch().Add(d))
 	if top {
@@ -120,7 +126,6 @@ Loop:
 func (h *tHeap) push(t *Timer, e Epoch) bool {
 	l := uint32(len(h.h))
 	t.i = l
-	t.h = h.i
 	h.h = append(h.h, tItem{t: t, e: e})
 	//log.Println("push", h.h, l)
 	if l > 3 {
@@ -134,7 +139,6 @@ func (h *tHeap) pop() {
 	//log.Println("pop", h.h, l)
 	t := &h.h[3]
 	t.t.i = 0
-	t.t.h = 0
 	if l > 3 {
 		*t = h.h[l]
 		t.t.i = 3
@@ -150,7 +154,6 @@ func (h *tHeap) remove(i uint32) {
 	//log.Println("remove", h.h, i, l)
 	t := &h.h[i]
 	t.t.i = 0
-	t.t.h = 0
 	if i < l {
 		*t = h.h[l]
 		t.t.i = i
