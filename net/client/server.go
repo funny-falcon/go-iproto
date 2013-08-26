@@ -76,17 +76,10 @@ func (cfg *ServerConfig) NewServer() (serv *Server) {
 		connections: make(map[uint64]*connection.Connection),
 	}
 
-	serv.SimplePoint.Init()
+	serv.SimplePoint.Init(serv)
 	serv.ConnErr = serv.connErr
 
 	return
-}
-
-func (serv *Server) Run(ch chan *iproto.Request, standalone bool) {
-	serv.SetChan(ch, standalone)
-	serv.needConns = serv.Connections
-	serv.reconnecter = time.NewTicker(time.Second / 5)
-	go serv.Loop()
 }
 
 func (serv *Server) fixConnections() {
@@ -122,6 +115,8 @@ func (serv *Server) Name() string {
 }
 
 func (serv *Server) Loop() {
+	serv.needConns = serv.Connections
+	serv.reconnecter = time.NewTicker(time.Second / 5)
 	for {
 		select {
 		case <-serv.ExitChan():

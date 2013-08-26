@@ -85,19 +85,14 @@ func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 		loopNotify: make(chan notifyAction, 2),
 		State: CsNew,
 	}
-	conn.SimplePoint.Init()
+	conn.SimplePoint.Init(conn)
 	return
 }
 
 /* default 5 seconds interval for Connection */
 const DialTimeout = 5 * time.Second
 
-func (conn *Connection) Run(ch chan *iproto.Request, standalone bool) {
-	conn.SetChan(ch, standalone)
-	go conn.dial()
-}
-
-func (conn *Connection) dial() {
+func (conn *Connection) Loop() {
 	dialer := net.Dialer{Timeout: DialTimeout}
 	conn.State = CsDialing
 	if netconn, err := dialer.Dial(conn.Network, conn.Address); err != nil {

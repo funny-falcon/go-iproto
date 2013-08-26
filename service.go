@@ -32,13 +32,13 @@ func (f FuncMiddleService) Runned() bool {
 type FuncEndService func(*Request)
 
 func (f FuncEndService) SendWrapped(r *Request) {
-	if r.SetInFly(nil) {
+	if r.SetPending() && r.SetInFly(nil) {
 		f(r)
 	}
 }
 
 func (f FuncEndService) Send(r *Request) {
-	if r.SetInFly(nil) {
+	if r.SetPending() && r.SetInFly(nil) {
 		f(r)
 	}
 }
@@ -61,6 +61,10 @@ func Run(s EndPoint) {
 	s.Run(ch, true)
 }
 
+type PointLoop interface {
+	Loop()
+}
+
 //   SimplePoint is a simple EndPoint implementation.
 //   One could start implementing by embedding it and overriding Run method and setting OnExit
 //       type MyEndPoint struct {
@@ -78,6 +82,7 @@ type SimplePoint struct {
 	b Buffer
 	exit         chan bool
 	standalone bool
+	PointLoop
 	Timeout      time.Duration
 	Worktime     time.Duration
 }
@@ -88,7 +93,7 @@ func (s *SimplePoint) Runned() bool {
 	return s.b.in != nil
 }
 
-func (s *SimplePoint) SetChan(ch chan *Request, standalone bool) {
+func (s *SimplePoint) Run(ch chan *Request, standalone bool) {
 	s.b.in = ch
 	s.standalone = standalone
 	if standalone {
@@ -96,6 +101,7 @@ func (s *SimplePoint) SetChan(ch chan *Request, standalone bool) {
 		s.standalone = standalone
 		go s.b.loop()
 	}
+	go s.Loop()
 }
 
 func (s *SimplePoint) ReceiveChan() <-chan *Request {
@@ -117,37 +123,13 @@ func (s *SimplePoint) RunChild(p EndPoint) {
 	}
 }
 
-func (s *SimplePoint) Init() {
+func (s *SimplePoint) Init(p PointLoop) {
+	s.PointLoop = p
 	s.exit = make(chan bool)
 }
 
 func (s *SimplePoint) ExitChan() <-chan bool {
 	return s.exit
-}
-
-// Run - main function to override. Example
-//     func (s *MyEndPoint) RunAsChild(ch chan *Request, standalone bool) {
-//     	s.SetChan(ch, standalone)
-//     	go func() {
-//     		for {
-//     			select {
-//     			case req, ok := <-s.requests:
-//     				if ok {
-//     					if req.SetInFly() && !req.Expired() {
-//     						s.doSomethingUseful(req)
-//     					}
-//     				} else {
-//     					return
-//     				}
-//     			case <-s.exit:
-//     				return
-//     			}
-//     		}
-//     	}()
-//     }
-func (s *SimplePoint) Run(ch chan *Request, standalone bool) {
-	s.SetChan(ch, standalone)
-	panic("(*SimplePoint).Run should be overrided")
 }
 
 func (s *SimplePoint) SendWrapped(r *Request) {
