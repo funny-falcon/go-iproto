@@ -46,7 +46,6 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 		Responder: w,
 	}
 	w.reqn++
-	req.chainMiddleware(waitGroupMiddleware{w})
 	w.m.Unlock()
 	return req
 }
@@ -149,34 +148,3 @@ func (w *WaitGroup) Cancel() {
 	}
 }
 
-type waitGroupMiddleware struct {
-	*WaitGroup
-}
-
-func (w waitGroupMiddleware) Respond(r Response) Response {
-	return r
-}
-func (w waitGroupMiddleware) Cancel() {
-}
-func (w waitGroupMiddleware) valid() bool {
-	return true
-}
-func (w waitGroupMiddleware) setReq(r *Request, m Middleware) {
-	if r.chain != nil {
-		log.Panicf("waitGroupMiddleware should be first in chain %+v %+v", m, r.chain)
-	}
-}
-func (w waitGroupMiddleware) unchain() Middleware {
-	return nil
-}
-
-func (w waitGroupMiddleware) previous() Middleware {
-	return nil
-}
-func (w waitGroupMiddleware) CancelChan() chan bool {
-	return w.cancel
-}
-func (w waitGroupMiddleware) InitChan() {
-}
-func (w waitGroupMiddleware) CloseChan() {
-}

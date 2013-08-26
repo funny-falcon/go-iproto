@@ -102,7 +102,8 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	ProxyTestService = recurConf.NewServer()
+	netserv := recurConf.NewServer()
+	ProxyTestService = &iproto.BufferPoint{S: netserv}
 
 	self := serverConf.NewServer()
 	self.Run()

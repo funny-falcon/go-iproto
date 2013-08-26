@@ -191,9 +191,6 @@ func (r *Request) ChainMiddleware(res Middleware) (chained bool) {
 
 func (r *Request) chainMiddleware(res Middleware) {
 	res.setReq(r, res)
-	if ch, ok := res.(CancelChaner); ok {
-		ch.InitChan()
-	}
 }
 
 func (r *Request) UnchainMiddleware(res Middleware) {
@@ -206,9 +203,6 @@ func (r *Request) UnchainMiddleware(res Middleware) {
 
 func (r *Request) unchainMiddleware(res Middleware) (next Middleware) {
 	next = res.unchain()
-	if ch, ok := res.(CancelChaner); ok {
-		ch.CloseChan()
-	}
 	return
 }
 

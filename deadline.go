@@ -10,7 +10,6 @@ var _ = log.Print
 
 type Deadline struct {
 	BasicResponder
-	BasicCancelChaner
 
 	Deadline Epoch
 	/* WorkTime is a hint to EndPoint, will Deadline be reached if we send request now.
