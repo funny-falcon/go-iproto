@@ -3,57 +3,7 @@ package iproto
 import (
 	"log"
 )
-
-type BufferPoint struct {
-	b Buffer
-	standalone bool
-	S EndPoint
-}
-
-func (b *BufferPoint) Send(r *Request) {
-	if !r.SetPending() {
-		/* this could happen if SetDeadline already respond with timeout */
-		if r.state == RsPerformed || r.state == RsCanceled {
-			return
-		}
-		log.Panicf("Request already sent somewhere %+v")
-	}
-
-	b.b.in <- r
-}
-
-func (b *BufferPoint) SendWrapped(r *Request) {
-	if !r.SetPending() {
-		/* this could happen if SetDeadline already respond with timeout */
-		if r.state == RsPerformed || r.state == RsCanceled {
-			return
-		}
-		log.Panicf("Request already sent somewhere %+v")
-	}
-
-	b.b.in <- r
-}
-
-func (b *BufferPoint) Runned() bool {
-	return b.b.in != nil
-}
-
-func (b *BufferPoint) Run(reqs chan *Request, standalone bool) {
-	b.b.in = reqs
-	b.b.out = make(chan *Request, 16*1024)
-	b.standalone = standalone
-	b.S.Run(b.b.out, false)
-	go b.b.loop()
-}
-
-func (b *BufferPoint) Stop() {
-	if b.standalone {
-		close(b.b.in)
-	}
-	b.b.in = nil
-}
-
-var _ EndPoint = (*BufferPoint)(nil)
+var _ = log.Print
 
 type Buffer struct {
 	in chan *Request

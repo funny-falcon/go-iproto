@@ -57,7 +57,7 @@ func Run(s EndPoint) {
 	if s.Runned() {
 		log.Panicf("EndPoint already runned ( %v )", s)
 	}
-	ch := make(chan *Request, 16*1024)
+	ch := make(chan *Request, 1024)
 	s.Run(ch, true)
 }
 
@@ -75,9 +75,9 @@ func Run(s EndPoint) {
 //	       /* custom logick */
 //       }
 type SimplePoint struct {
-	requests     chan *Request
+	b Buffer
 	exit         chan bool
-	isStandalone bool
+	standalone bool
 	Timeout      time.Duration
 	Worktime     time.Duration
 }
@@ -85,23 +85,36 @@ type SimplePoint struct {
 var _ EndPoint = (*SimplePoint)(nil)
 
 func (s *SimplePoint) Runned() bool {
-	return s.requests != nil
+	return s.b.in != nil
 }
 
 func (s *SimplePoint) SetChan(ch chan *Request, standalone bool) {
-	s.requests = ch
-	s.isStandalone = standalone
+	s.b.in = ch
+	s.standalone = standalone
+	if standalone {
+		s.b.out = make(chan *Request, 16*1024)
+		s.standalone = standalone
+		go s.b.loop()
+	}
 }
 
 func (s *SimplePoint) ReceiveChan() <-chan *Request {
-	return s.requests
+	if s.standalone {
+		return s.b.out
+	} else {
+		return s.b.in
+	}
 }
 
 func (s *SimplePoint) RunChild(p EndPoint) {
 	if p.Runned() {
 		log.Panicf("EndPoint already runned ( %v )", s)
 	}
-	p.Run(s.requests, false)
+	if s.standalone {
+		p.Run(s.b.out, false)
+	} else {
+		p.Run(s.b.in, false)
+	}
 }
 
 func (s *SimplePoint) Init() {
@@ -138,11 +151,11 @@ func (s *SimplePoint) Run(ch chan *Request, standalone bool) {
 }
 
 func (s *SimplePoint) SendWrapped(r *Request) {
-	if s.requests == nil {
+	if s.b.in == nil {
 		panic("EndPoint is not running")
 	}
 
-	if !s.isStandalone {
+	if !s.standalone {
 		log.Panicf("you should not call SendWrapped on child endpoint %+v", s)
 	}
 
@@ -154,15 +167,15 @@ func (s *SimplePoint) SendWrapped(r *Request) {
 		log.Panicf("Request already sent somewhere %+v")
 	}
 
-	s.requests <- r
+	s.b.in <- r
 }
 
 func (s *SimplePoint) Send(r *Request) {
-	if s.requests == nil {
+	if s.b.in == nil {
 		panic("EndPoint is not running")
 	}
 
-	if !s.isStandalone {
+	if !s.standalone {
 		log.Panicf("you should not call SendWrapped on child endpoint %+v", s)
 	}
 
@@ -183,7 +196,7 @@ func (s *SimplePoint) Send(r *Request) {
 		return
 	}
 
-	s.requests <- r
+	s.b.in <- r
 }
 
 func (s *SimplePoint) Stop() {
