@@ -56,13 +56,17 @@ func nextHeap() *tHeap {
 	if i%10000 == 0 {
 		heapM.Lock()
 		n := runtime.GOMAXPROCS(-1)
-		for len(heaps) < n*4 && len(heaps) < 256 {
+		if n == 1 {
+			n = 2
+		} else {
+			if n *= 4; n > 256 {
+				n = 256
+			}
+		}
+		for len(heaps) < n {
 			heaps = append(heaps, newHeap(uint32(len(heaps)+1)))
 		}
-		heapN = uint32(n) * 4
-		if heapN > 256 {
-			heapN = 256
-		}
+		heapN = uint32(n)
 		heapM.Unlock()
 	}
 	return heaps[i%heapN]
@@ -129,7 +133,7 @@ func (h *tHeap) push(t *Timer, e Epoch) bool {
 	h.h = append(h.h, tItem{t: t, e: e})
 	//log.Println("push", h.h, l)
 	if l > 3 {
-		h.down(l)
+		h.up(l)
 	}
 	return t.i == 3
 }
@@ -183,6 +187,7 @@ func (th *tHeap) up(i uint32) {
 		h[i].t.i = i
 		h[j] = t
 		t.t.i = j
+		i = j
 	}
 }
 
@@ -225,5 +230,6 @@ func (th *tHeap) down(i uint32) {
 		h[i].t.i = i
 		h[j] = t
 		t.t.i = j
+		i = j
 	}
 }
