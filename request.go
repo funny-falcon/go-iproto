@@ -173,12 +173,12 @@ func (r *Request) chainResponse(res Response) {
 	r.timer.Stop()
 }
 
-func (r *Request) Response(res Response, responder Middleware) {
+func (r *Request) Response(res Response) {
 	r.Lock()
-	defer r.Unlock()
-	if r.state == RsInFly && (responder == nil || responder == r.chain) {
+	if r.state == RsInFly {
 		r.chainResponse(res)
 	}
+	r.Unlock()
 }
 
 func (r *Request) ChainMiddleware(res Middleware) (chained bool) {
@@ -211,7 +211,7 @@ func (r *Request) unchainMiddleware(res Middleware) (next Middleware) {
 }
 
 func (r *Request) Respond(code RetCode, body []byte) {
-	r.Response(Response{Id: r.Id, Msg: r.Msg, Code: code, Body: body}, nil)
+	r.Response(Response{Id: r.Id, Msg: r.Msg, Code: code, Body: body})
 }
 
 const (

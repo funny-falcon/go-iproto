@@ -172,7 +172,7 @@ func (conn *Connection) flushInFly() {
 		if request := req.Request; request != nil {
 			resp.Msg = request.Msg
 			resp.Id = req.fakeId
-			request.Response(resp, req)
+			request.Response(resp)
 		}
 	}
 }
@@ -203,7 +203,7 @@ func (conn *Connection) readLoop() {
 		}
 
 		if ireq := req.Request; ireq != nil {
-			ireq.Response(iproto.Response(res), req)
+			ireq.Response(iproto.Response(res))
 		}
 
 		conn.inFly.putBack(req, row)
