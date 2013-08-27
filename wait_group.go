@@ -1,9 +1,10 @@
 package iproto
 
 import (
-	"github.com/funny-falcon/go-iproto/util"
 	"log"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 
 type WaitGroup struct {
 	m         sync.Mutex
-	c         util.Atomic
+	c         uint32
 	reqn      uint32
 	requests  []*[wgBufSize]Request
 	responses []Response
@@ -46,7 +47,7 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 
 	req := &(*w.requests[w.reqn/wgBufSize])[w.reqn%wgBufSize]
 	*req = Request{
-		Id:        uint32(w.reqn),
+		Id:        w.reqn,
 		Msg:       msg,
 		Body:      body,
 		Responder: w,
@@ -66,7 +67,7 @@ func (w *WaitGroup) Each() <-chan Response {
 		w.ch <- resp
 	}
 	w.responses = nil
-	if uint32(w.c) == w.reqn {
+	if w.c == w.reqn {
 		close(w.ch)
 	}
 	w.m.Unlock()
@@ -82,7 +83,7 @@ func (w *WaitGroup) Results() []Response {
 		copy(tmp, w.responses)
 		w.responses = tmp
 	}
-	if uint32(w.c.Get()) < w.reqn {
+	if atomic.LoadUint32(&w.c) < w.reqn {
 		w.w.Wait()
 	}
 	res := w.responses
@@ -107,7 +108,7 @@ func (w *WaitGroup) Respond(r Response) {
 }
 
 func (w *WaitGroup) inc() {
-	if v := w.c.Incr(); uint32(v) == w.reqn {
+	if v := atomic.AddUint32(&w.c, 1); v == w.reqn {
 		w.m.Lock()
 		switch w.kind {
 		case wgChan:
@@ -122,7 +123,7 @@ func (w *WaitGroup) inc() {
 }
 
 func (w *WaitGroup) incLocked() {
-	if v := w.c.Incr(); uint32(v) == w.reqn {
+	if v := atomic.AddUint32(&w.c, 1); v == w.reqn {
 		switch w.kind {
 		case wgChan:
 			w.timer.Stop()
@@ -135,7 +136,7 @@ func (w *WaitGroup) incLocked() {
 }
 
 func (w *WaitGroup) Cancel() {
-	if uint32(w.c) == w.reqn {
+	if w.c == w.reqn {
 		return
 	}
 	w.m.Lock()
@@ -154,6 +155,9 @@ func (w *WaitGroup) Cancel() {
 
 func (w *WaitGroup) Expire() {
 	w.timer.Stop()
+	if w.c == w.reqn {
+		return
+	}
 
 	requests := make([]*Request, 0, w.reqn)
 	w.m.Lock()
