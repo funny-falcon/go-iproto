@@ -3,7 +3,7 @@ package connection
 import (
 	"github.com/funny-falcon/go-iproto"
 	"sync"
-	"github.com/funny-falcon/go-iproto/util"
+	"sync/atomic"
 	"log"
 )
 
@@ -14,36 +14,43 @@ const (
 )
 
 type RequestRow struct {
-	freed util.Atomic
+	freed uint32
 	reqs  [rowN]Request
 }
 
-type reqMap map[util.Atomic]*RequestRow
+type reqMap map[uint32]*RequestRow
 type RequestHolder struct {
-	sync.RWMutex
-	count util.Atomic
-	curId util.Atomic
+	sync.Mutex
+	count uint32
+	curId uint32
 	reqs reqMap
+	cur  *RequestRow
+	big  uint32
+	last *RequestRow
+	lastBig uint32
 }
 
-func (h *RequestHolder) getNext(conn *Connection) (req *Request, reqs *RequestRow) {
-	h.count.Incr()
+func (h *RequestHolder) init() {
+	h.cur = &RequestRow{}
+	h.last = h.cur
+	h.reqs = make(reqMap)
+	h.reqs[0] = h.cur
+}
+
+func (h *RequestHolder) getNext(conn *Connection) (req *Request) {
+	atomic.AddUint32(&h.count, 1)
 	for {
-		var ok bool
-		id := h.curId.Incr()
+		id := atomic.AddUint32(&h.curId, 1)
 		big := id>>rowLogN
-		h.RLock()
-		reqs, ok = h.reqs[big]
-		h.RUnlock()
-		if !ok {
+		if h.big != big {
+			h.big = big
+			h.cur = &RequestRow{}
 			h.Lock()
-			if reqs, ok = h.reqs[big]; !ok {
-				reqs = &RequestRow{}
-				h.reqs[big] = reqs
-			}
+			h.reqs[big] = h.cur
 			h.Unlock()
 		}
-		if id != 0 && id != util.Atomic(iproto.PingRequestId) {
+		reqs := h.cur
+		if id != 0 && id != uint32(iproto.PingRequestId) {
 			req = &reqs.reqs[id&rowMask]
 			if req.fakeId != 0 {
 				continue
@@ -56,28 +63,32 @@ func (h *RequestHolder) getNext(conn *Connection) (req *Request, reqs *RequestRo
 
 func (h *RequestHolder) get(id uint32) (req *Request, reqs *RequestRow) {
 	var ok bool
-	h.RLock()
-	big := util.Atomic(id>>rowLogN)
-	if reqs, ok = h.reqs[big]; !ok {
-		h.RUnlock()
-		log.Panicf("Map has no RequestRow for %d", id)
+	big := id>>rowLogN
+	if h.lastBig != big {
+		h.Lock()
+		if h.last, ok = h.reqs[big]; !ok {
+			h.Unlock()
+			log.Panicf("Map has no RequestRow for %d", id)
+		}
+		h.lastBig = big
+		h.Unlock()
 	}
+	reqs = h.last
 	req = &reqs.reqs[id&rowMask]
-	h.RUnlock()
 	return
 }
 
 func (h *RequestHolder) putBack(r *Request, reqs *RequestRow) {
-	big := util.Atomic(r.fakeId>>rowLogN)
+	big := r.fakeId>>rowLogN
 	reqs.reqs[r.fakeId&rowMask].fakeId = 0
-	border := big == 0 || big == util.Atomic(iproto.PingRequestId>>8)
-	freed := reqs.freed.Incr()
-	if freed == rowN || (freed == rowN1 && border) {
+	border := big == 0 || big == uint32(iproto.PingRequestId>>8)
+	reqs.freed++
+	if reqs.freed == rowN || (reqs.freed == rowN1 && border) {
 		h.Lock()
 		delete(h.reqs, big)
 		h.Unlock()
 	}
-	h.count.Decr()
+	atomic.AddUint32(&h.count, ^uint32(0))
 }
 
 func (h *RequestHolder) getAll() (reqs []*Request) {

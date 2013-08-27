@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 	"sync"
+	"sync/atomic"
 )
 
 type notifyAction uint32
@@ -80,11 +81,10 @@ func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 		CConf: conf,
 		Id:    id,
 
-		inFly:        RequestHolder{reqs: make(reqMap)},
-
 		loopNotify: make(chan notifyAction, 2),
 		State: CsNew,
 	}
+	conn.inFly.init()
 	conn.SimplePoint.Init(conn)
 	return
 }
@@ -149,7 +149,7 @@ func (conn *Connection) controlLoop() {
 		}
 
 		if conn.State & CsWriteClosed != 0 {
-			if !closeReadCalled && conn.inFly.count.Get() == 0 {
+			if !closeReadCalled && atomic.LoadUint32(&conn.inFly.count) == 0 {
 				conn.conn.CloseRead()
 				closeReadCalled = true
 			}
@@ -158,15 +158,6 @@ func (conn *Connection) controlLoop() {
 			}
 		}
 	}
-}
-
-func (conn *Connection) putInFly(request *iproto.Request) *Request {
-	req, row := conn.inFly.getNext(conn)
-	if request.SetInFly(req) {
-		return req
-	}
-	conn.inFly.putBack(req, row)
-	return nil
 }
 
 func (conn *Connection) flushInFly() {
@@ -246,10 +237,11 @@ func (conn *Connection) writeLoop() {
 		conn.ConnErr <- Error{conn, Write, err}
 	}()
 
+	var req *Request
+
 Loop:
 	for {
 		var request *iproto.Request
-		var req *Request
 		var ping bool
 		var requestHeader nt.Request
 
@@ -257,12 +249,16 @@ Loop:
 		case <-conn.ExitChan():
 			conn.shutdown = true
 			break Loop
+		default:
+		}
+
+		select {
 		case request = <-conn.ReceiveChan():
 		default:
 			if err = w.Flush(); err != nil {
 				break Loop
 			}
-			//time.Sleep(2*time.Millisecond)
+			time.Sleep(time.Millisecond)
 			select {
 			case <-pingTicker.C:
 				ping = true
@@ -280,7 +276,10 @@ Loop:
 				Id:   iproto.PingRequestId,
 			}
 		} else {
-			if req = conn.putInFly(request); req == nil {
+			if req == nil {
+				req = conn.inFly.getNext(conn)
+			}
+			if !request.SetInFly(req) {
 				continue
 			}
 			requestHeader = nt.Request{
@@ -288,6 +287,7 @@ Loop:
 				Id: req.fakeId,
 				Body: request.Body,
 			}
+			req = nil
 		}
 
 		if err = w.WriteRequest(requestHeader); err != nil {
