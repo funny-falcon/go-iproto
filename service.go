@@ -98,6 +98,7 @@ func (s *SimplePoint) Run(ch chan *Request, standalone bool) {
 	s.standalone = standalone
 	if standalone {
 		s.b.out = make(chan *Request, 16*1024)
+		s.b.onExit = func(){ close(s.b.out) }
 		s.standalone = standalone
 		go s.b.loop()
 	}
