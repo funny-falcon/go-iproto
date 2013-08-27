@@ -14,7 +14,6 @@ const (
 )
 
 type RequestRow struct {
-	used util.Atomic
 	freed util.Atomic
 	reqs  [rowN]Request
 }
@@ -50,7 +49,6 @@ func (h *RequestHolder) getNext(conn *Connection) (req *Request, reqs *RequestRo
 				continue
 			}
 			req.fakeId = uint32(id)
-			reqs.used.Incr()
 			return
 		}
 	}
