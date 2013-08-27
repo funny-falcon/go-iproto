@@ -39,7 +39,7 @@ func (w *WaitGroup) SetITimeout(timeout time.Duration) {
 }
 
 func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
-	w.lock()
+	w.m.Lock()
 	if w.reqn%wgBufSize == 0 {
 		w.requests = append(w.requests, &[wgBufSize]Request{})
 	}
@@ -52,12 +52,12 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 		Responder: w,
 	}
 	w.reqn++
-	w.unlock()
+	w.m.Unlock()
 	return req
 }
 
 func (w *WaitGroup) Each() <-chan Response {
-	w.lock()
+	w.m.Lock()
 	w.kind = wgChan
 	w.ch = make(chan Response, w.reqn)
 
@@ -69,12 +69,12 @@ func (w *WaitGroup) Each() <-chan Response {
 	if uint32(w.c) == w.reqn {
 		close(w.ch)
 	}
-	w.unlock()
+	w.m.Unlock()
 	return w.ch
 }
 
 func (w *WaitGroup) Results() []Response {
-	w.lock()
+	w.m.Lock()
 	w.kind = wgWait
 	w.w = sync.NewCond(&w.m)
 	if cap(w.responses) < int(w.reqn) {
@@ -87,20 +87,20 @@ func (w *WaitGroup) Results() []Response {
 	}
 	res := w.responses
 	w.responses = nil
-	w.unlock()
+	w.m.Unlock()
 	return res
 }
 
 func (w *WaitGroup) Respond(r Response) {
 	if w.ch == nil {
-		w.lock()
+		w.m.Lock()
 		if w.ch == nil {
 			w.responses = append(w.responses, r)
 			w.incLocked()
-			w.unlock()
+			w.m.Unlock()
 			return
 		}
-		w.unlock()
+		w.m.Unlock()
 	}
 	w.ch <- r
 	w.inc()
@@ -108,7 +108,7 @@ func (w *WaitGroup) Respond(r Response) {
 
 func (w *WaitGroup) inc() {
 	if v := w.c.Incr(); uint32(v) == w.reqn {
-		w.lock()
+		w.m.Lock()
 		switch w.kind {
 		case wgChan:
 			w.timer.Stop()
@@ -117,7 +117,7 @@ func (w *WaitGroup) inc() {
 			w.timer.Stop()
 			w.w.Signal()
 		}
-		w.unlock()
+		w.m.Unlock()
 	}
 }
 
@@ -138,8 +138,8 @@ func (w *WaitGroup) Cancel() {
 	if uint32(w.c) == w.reqn {
 		return
 	}
-	w.lock()
-	defer w.unlock()
+	w.m.Lock()
+	defer w.m.Unlock()
 
 	w.timer.Stop()
 	for _, reqs := range w.requests {
@@ -156,7 +156,7 @@ func (w *WaitGroup) Expire() {
 	w.timer.Stop()
 
 	requests := make([]*Request, 0, w.reqn)
-	w.lock()
+	w.m.Lock()
 	n := w.reqn
 	for _, reqs := range w.requests {
 		if n == 0 {
@@ -174,18 +174,10 @@ func (w *WaitGroup) Expire() {
 			n--
 		}
 	}
-	w.unlock()
+	w.m.Unlock()
 	for _, req := range requests {
 		if req != nil {
 			req.Expire()
 		}
 	}
-}
-
-func (w *WaitGroup) lock() {
-	w.m.Lock()
-}
-
-func (w *WaitGroup) unlock() {
-	w.m.Unlock()
 }
