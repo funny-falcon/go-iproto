@@ -55,15 +55,15 @@ func (r *Request) Expire() {
 	state := atomic.LoadUint32(&r.state)
 	for state == RsNew || state&(RsPending|RsInFly) != 0 {
 		r.Lock()
-		if state != r.state {
-			state = r.state
-			r.Unlock()
-			continue
+		if state == r.state {
+			defer r.Unlock()
+			r.chainCancel(nil)
+			res := Response{Id: r.Id, Msg: r.Msg, Code: RcSendTimeout}
+			r.Responder.Respond(res)
+			break
 		}
-		r.chainCancel(nil)
-		res := Response{Id: r.Id, Msg: r.Msg, Code: RcSendTimeout}
+		state = r.state
 		r.Unlock()
-		r.Responder.Respond(res)
 	}
 }
 
