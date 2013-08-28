@@ -2,86 +2,130 @@ package iproto
 
 import (
 	"log"
+	"sync"
+	"sync/atomic"
 )
+
 var _ = log.Print
 
+type bufResponder struct {
+	BasicResponder
+	state uint32
+}
+
+func (b *bufResponder) Respond(r Response) Response {
+	b.state = bsFree
+	return r
+}
+
+func (b *bufResponder) Cancel() {
+	b.state = bsFree
+}
+
+const (
+	bsNew = iota
+	bsSet
+	bsFree
+)
+
+const (
+	bufRow = 1024
+)
+
+type bufferRow struct {
+	id uint64
+	row [bufRow]bufResponder
+}
+
 type Buffer struct {
-	in chan *Request
-	out chan *Request
+	ch chan *Request
 	onExit func()
-	buf   [][]BasicResponder
+	set chan bool
+	m sync.Mutex
+	rows map[uint64] *bufferRow
+	head, tail uint64
+	hRow, tRow *bufferRow
+}
+
+func (b *Buffer) init() {
+	b.rows = make(map[uint64] *bufferRow)
+	row := new(bufferRow)
+	b.hRow, b.tRow, b.rows[0] = row, row, row
+	b.set = make(chan bool, 1)
+}
+
+func (b *Buffer) push(r *Request) {
+	if b.tail == b.head {
+		select {
+		case b.ch <- r:
+			return
+		default:
+		}
+	}
+
+	tail := atomic.AddUint64(&b.tail, 1)-1
+	big := tail / bufRow
+	row := b.tRow
+	if row.id != big {
+		var ok bool
+		b.m.Lock()
+		if row, ok = b.rows[big]; !ok {
+			row = &bufferRow{id: big}
+			b.rows[big] = row
+			b.tRow = row
+		}
+		b.m.Unlock()
+	}
+
+	middle := &row.row[tail % bufRow]
+	r.ChainMiddleware(middle)
+	middle.state = bsSet
+	select {
+	case b.set <- true:
+	default:
+	}
+}
+
+func (b *Buffer) close() {
+	select {
+	case b.set <- true:
+	default:
+	}
+	close(b.set)
 }
 
 func (b *Buffer) loop() {
-Loop:
-	for {
-		if first, ok := b.shift(); ok {
-			req := first.Request
-			if req == nil || !req.UnchainMiddleware(first) {
-				continue Loop
-			}
-			for {
-				if !req.IsPending() {
-					continue Loop
+	for <-b.set {
+		Tiny:
+		for ; b.head < atomic.LoadUint64(&b.tail); b.head++ {
+			var ok bool
+			big := b.head / bufRow
+			row := b.hRow
+			if row.id != big {
+				b.m.Lock()
+				row, ok = b.rows[big]
+				delete(b.rows, big-1)
+				b.m.Unlock()
+				if !ok {
+					break
 				}
-				select {
-				case r, ok := <-b.in:
-					if ok {
-						b.push(r)
-					} else {
-						b.in = nil
-					}
-				case b.out <- req:
-					continue Loop
-				}
+				b.hRow = row
 			}
-		}
-		for {
-			var in chan *Request
-			if in = b.in; in == nil {
-				break
-			}
-			if r, ok := <-in; ok {
-				select {
-				case b.out<-r:
-				default:
-					b.push(r)
-					continue Loop
+			middle := &row.row[b.head % bufRow]
+			switch middle.state {
+			case bsNew:
+				break Tiny
+			case bsSet:
+				req := middle.Request
+				middle.state = bsFree
+				if req != nil && req.IsPending() {
+					b.ch <- req
 				}
-			} else {
-				break Loop
+			case bsFree:
 			}
 		}
 	}
 	if b.onExit != nil {
 		b.onExit()
 	}
-}
-
-func (b *Buffer) push(r *Request) {
-	var buf *[]BasicResponder
-	l := len(b.buf)
-	if l > 0 {
-		buf = &b.buf[l-1]
-	}
-	if buf == nil || len(*buf) == cap(*buf) {
-		b.buf = append(b.buf, make([]BasicResponder, 0, 16))
-		buf = &b.buf[l]
-	}
-	*buf = append(*buf, BasicResponder{})
-	r.ChainMiddleware(&(*buf)[len(*buf)-1])
-}
-
-func (b *Buffer) shift() (br *BasicResponder, ok bool) {
-	if len(b.buf) > 0 {
-		buf := &b.buf[0]
-		if len(*buf) > 0 {
-			br, ok = &(*buf)[0], true
-			*buf = (*buf)[1:]
-			if cap(*buf) == 0 {
-				b.buf = b.buf[1:]
-			}
-		}
-	}
-	return
 }

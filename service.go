@@ -49,7 +49,7 @@ func (f FuncEndService) Runned() bool {
 
 type EndPoint interface {
 	Service
-	Run(requests chan *Request, standalone bool)
+	Run(requests chan *Request)
 	Stop()
 }
 
@@ -57,27 +57,13 @@ func Run(s EndPoint) {
 	if s.Runned() {
 		log.Panicf("EndPoint already runned ( %v )", s)
 	}
-	ch := make(chan *Request, 1024)
-	s.Run(ch, true)
+	s.Run(nil)
 }
 
 type PointLoop interface {
 	Loop()
 }
 
-//   SimplePoint is a simple EndPoint implementation.
-//   One could start implementing by embedding it and overriding Run method and setting OnExit
-//       type MyEndPoint struct {
-//	       iproto.SimplePoint
-//	       /* custom fields */
-//       }
-//       func (e *MyEndPoint) Init() {
-//	       e.SimplePoint.OnExit = e.Exit
-//	       e.SimplePoint.Init()
-//       }
-//       func (e *MyEndPoint) Run() {
-//	       /* custom logick */
-//       }
 type SimplePoint struct {
 	b Buffer
 	exit         chan bool
@@ -90,38 +76,31 @@ type SimplePoint struct {
 var _ EndPoint = (*SimplePoint)(nil)
 
 func (s *SimplePoint) Runned() bool {
-	return s.b.in != nil
+	return s.b.ch != nil
 }
 
-func (s *SimplePoint) Run(ch chan *Request, standalone bool) {
-	s.b.in = ch
-	s.standalone = standalone
-	if standalone {
-		s.b.out = make(chan *Request, 16*1024)
-		s.b.onExit = func(){ close(s.b.out) }
-		s.standalone = standalone
+func (s *SimplePoint) Run(ch chan *Request) {
+	if ch == nil {
+		ch = make(chan *Request, 16 * 1024)
+		s.standalone = true
+		s.b.init()
+	}
+	s.b.ch = ch
+	if s.standalone {
 		go s.b.loop()
 	}
 	go s.Loop()
 }
 
 func (s *SimplePoint) ReceiveChan() <-chan *Request {
-	if s.standalone {
-		return s.b.out
-	} else {
-		return s.b.in
-	}
+	return s.b.ch
 }
 
 func (s *SimplePoint) RunChild(p EndPoint) {
 	if p.Runned() {
 		log.Panicf("EndPoint already runned ( %v )", s)
 	}
-	if s.standalone {
-		p.Run(s.b.out, false)
-	} else {
-		p.Run(s.b.in, false)
-	}
+	p.Run(s.b.ch)
 }
 
 func (s *SimplePoint) Init(p PointLoop) {
@@ -134,7 +113,7 @@ func (s *SimplePoint) ExitChan() <-chan bool {
 }
 
 func (s *SimplePoint) SendWrapped(r *Request) {
-	if s.b.in == nil {
+	if s.b.ch == nil {
 		panic("EndPoint is not running")
 	}
 
@@ -150,11 +129,11 @@ func (s *SimplePoint) SendWrapped(r *Request) {
 		log.Panicf("Request already sent somewhere %+v")
 	}
 
-	s.b.in <- r
+	s.b.push(r)
 }
 
 func (s *SimplePoint) Send(r *Request) {
-	if s.b.in == nil {
+	if s.b.ch == nil {
 		panic("EndPoint is not running")
 	}
 
@@ -179,9 +158,12 @@ func (s *SimplePoint) Send(r *Request) {
 		return
 	}
 
-	s.b.in <- r
+	s.b.push(r)
 }
 
 func (s *SimplePoint) Stop() {
+	if s.standalone {
+		s.b.close()
+	}
 	s.exit <- true
 }
