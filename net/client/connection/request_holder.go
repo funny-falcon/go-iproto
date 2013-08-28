@@ -26,7 +26,8 @@ type RequestRow struct {
 type reqMap map[uint32]*RequestRow
 type RequestHolder struct {
 	sync.Mutex
-	count uint32
+	got uint64
+	put uint64
 	curId uint32
 	reqs reqMap
 	cur  *RequestRow
@@ -43,7 +44,7 @@ func (h *RequestHolder) init() {
 }
 
 func (h *RequestHolder) getNext(conn *Connection) (req *Request) {
-	atomic.AddUint32(&h.count, 1)
+	h.got++
 	for {
 		id := atomic.AddUint32(&h.curId, 1)
 		big := id>>rowLogN
@@ -91,14 +92,14 @@ func (h *RequestHolder) remove(fakeId uint32) (ireq *iproto.Request) {
 	req := &reqs.reqs[fakeId&rowMask]
 	req.fakeId = 0
 	ireq = req.Request
-	atomic.AddUint32(&h.count, ^uint32(0))
+	h.put++
 	return
 }
 
 func (h *RequestHolder) getAll() (reqs []*Request) {
 	h.Lock()
 	defer h.Unlock()
-	reqs = make([]*Request, h.count)
+	reqs = make([]*Request, h.got - h.put)
 	i := 0
 	for _, row := range h.reqs {
 		for _, req := range row.reqs {
@@ -110,4 +111,10 @@ func (h *RequestHolder) getAll() (reqs []*Request) {
 	}
 	reqs = reqs[:i]
 	return
+}
+
+func (h *RequestHolder) count() uint {
+	put := atomic.LoadUint64(&h.put)
+	got := atomic.LoadUint64(&h.got)
+	return uint(got - put)
 }

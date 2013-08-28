@@ -8,7 +8,6 @@ import (
 	"net"
 	"time"
 	"sync"
-	"sync/atomic"
 )
 var _ = log.Print
 
@@ -17,6 +16,7 @@ type notifyAction uint32
 const (
 	writeClosed = notifyAction(iota + 1)
 	readClosed
+	readEmpty
 )
 
 type ErrorWhen uint8
@@ -147,10 +147,11 @@ func (conn *Connection) controlLoop() {
 			if conn.State & CsWriteClosed == 0 {
 				conn.Stop()
 			}
+		case readEmpty:
 		}
 
 		if conn.State & CsWriteClosed != 0 {
-			if !closeReadCalled && atomic.LoadUint32(&conn.inFly.count) == 0 {
+			if !closeReadCalled && conn.inFly.count() == 0 {
 				conn.conn.CloseRead()
 				closeReadCalled = true
 			}
@@ -201,6 +202,9 @@ func (conn *Connection) readLoop() {
 		if ireq := conn.inFly.remove(res.Id); ireq != nil {
 			res.Id = ireq.Id
 			ireq.Response(iproto.Response(res))
+		}
+		if conn.State & CsWriteClosed != 0 && conn.inFly.put >= conn.inFly.got {
+			conn.notifyLoop(readEmpty)
 		}
 	}
 }
