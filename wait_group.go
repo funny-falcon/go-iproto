@@ -57,7 +57,6 @@ func (w *WaitGroup) SetITimeout(timeout time.Duration) {
 }
 
 func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
-	w.m.Lock()
 	if w.reqn%wgBufSize == 0 {
 		w.requests = append(w.requests, &[wgBufSize]Request{})
 	}
@@ -70,7 +69,6 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 		Responder: w,
 	}
 	w.reqn++
-	w.m.Unlock()
 	return req
 }
 
