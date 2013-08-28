@@ -27,10 +27,12 @@ type Request struct {
 	chain     Middleware
 	sync.Mutex
 	timer     Timer
+	timerSet  bool
 }
 
-func (r *Request) SetITimeout(timeout time.Duration) {
-	if timeout > 0 && r.timer.E == nil {
+func (r *Request) SetTimeout(timeout time.Duration) {
+	if timeout > 0 && !r.timerSet {
+		r.timerSet = true
 		r.timer.E = r
 		r.timer.After(timeout)
 	}

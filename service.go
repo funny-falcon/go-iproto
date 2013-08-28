@@ -10,16 +10,11 @@ var _ = log.Print
 type Service interface {
 	// Send accepts request to work. It should setup deadline, if it is defined for end point
 	Send(*Request)
-	// SendWrapped accepts request to work. It should not setup deadline, assuming, someone did it already
-	SendWrapped(*Request)
+	DefaultTimeout() time.Duration
 	Runned() bool
 }
 
 type FuncMiddleService func(*Request)
-
-func (f FuncMiddleService) SendWrapped(r *Request) {
-	f(r)
-}
 
 func (f FuncMiddleService) Send(r *Request) {
 	f(r)
@@ -29,13 +24,11 @@ func (f FuncMiddleService) Runned() bool {
 	return true
 }
 
-type FuncEndService func(*Request)
-
-func (f FuncEndService) SendWrapped(r *Request) {
-	if r.SetPending() && r.SetInFly(nil) {
-		f(r)
-	}
+func (f FuncMiddleService) DefaultTimeout() time.Duration {
+	return 0
 }
+
+type FuncEndService func(*Request)
 
 func (f FuncEndService) Send(r *Request) {
 	if r.SetPending() && r.SetInFly(nil) {
@@ -45,6 +38,10 @@ func (f FuncEndService) Send(r *Request) {
 
 func (f FuncEndService) Runned() bool {
 	return true
+}
+
+func (f FuncEndService) DefaultTimeout() time.Duration {
+	return 0
 }
 
 type EndPoint interface {
@@ -71,10 +68,13 @@ type SimplePoint struct {
 	standalone bool
 	PointLoop
 	Timeout      time.Duration
-	Worktime     time.Duration
 }
 
 var _ EndPoint = (*SimplePoint)(nil)
+
+func (s *SimplePoint) DefaultTimeout() time.Duration {
+	return s.Timeout
+}
 
 func (s *SimplePoint) Runned() bool {
 	return s.b.ch != nil
@@ -113,33 +113,13 @@ func (s *SimplePoint) ExitChan() <-chan bool {
 	return s.exit
 }
 
-func (s *SimplePoint) SendWrapped(r *Request) {
-	if s.b.ch == nil {
-		panic("EndPoint is not running")
-	}
-
-	if !s.standalone {
-		log.Panicf("you should not call SendWrapped on child endpoint %+v", s)
-	}
-
-	if !r.SetPending() {
-		/* this could happen if SetDeadline already respond with timeout */
-		if r.Performed() {
-			return
-		}
-		log.Panicf("Request already sent somewhere %+v")
-	}
-
-	s.b.push(r)
-}
-
 func (s *SimplePoint) Send(r *Request) {
 	if s.b.ch == nil {
 		panic("EndPoint is not running")
 	}
 
 	if !s.standalone {
-		log.Panicf("you should not call SendWrapped on child endpoint %+v", s)
+		log.Panicf("you should not call Send on child endpoint %+v", s)
 	}
 
 	if !r.SetPending() {
@@ -150,9 +130,7 @@ func (s *SimplePoint) Send(r *Request) {
 		log.Panicf("Request already sent somewhere %+v")
 	}
 
-	if s.Timeout > 0 {
-		r.SetITimeout(s.Timeout)
-	}
+	r.SetTimeout(s.Timeout)
 
 	/* this could happen if SetDeadline already respond with timeout */
 	if r.Performed() {

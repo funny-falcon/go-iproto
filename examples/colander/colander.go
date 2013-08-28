@@ -45,15 +45,24 @@ var OpTestService = iproto.FuncEndService(func(r *iproto.Request) {
 
 var in_count = 0
 var bad_count = 0
-var SumTestService = iproto.NewParallelService(256, func(r *iproto.Request) {
+var SumTestService = iproto.NewParallelService(512, time.Second, func(r *iproto.Request) {
+	defer func() {
+		if m := recover(); m != nil {
+			log.Printf("PANICING %+v", m)
+		}
+	}()
 	var wg iproto.WaitGroup
 	var sum uint32
 	result := iproto.RcOK
 
-	wg.Init()
-	bodies := make([]byte, 4*CHKNUM)
+	in_count++
+	if in_count % 10000 == 0 {
+		log.Println("in count", in_count)
+	}
+
+	wg.TimeoutFrom(ProxyTestService)
 	for i:=uint32(0); i<CHKNUM; i++ {
-		body := bodies[4*i:4*i+4]
+		body := make([]byte, 4)
 		le.PutUint32(body, i*i)
 		req := wg.Request(OP_TEST, body)
 		ProxyTestService.Send(req)
@@ -63,13 +72,21 @@ var SumTestService = iproto.NewParallelService(256, func(r *iproto.Request) {
 		if res.Code != iproto.RcOK {
 			wg.Cancel()
 			result = RcError
+			break
 		}
 		sum += le.Uint32(res.Body)
+	}
+	if result == RcError {
+		bad_count++
+		if bad_count % 1000 == 0 {
+			log.Println("bad count", bad_count)
+		}
 	}
 
 	body := make([]byte, 4)
 	le.PutUint32(body, sum)
-	r.Respond(result, body)
+	//r.Respond(result, body)
+	r.Respond(0, body)
 })
 
 var ProxyTestService iproto.EndPoint
@@ -83,10 +100,11 @@ var serverConf = server.Config {
 
 var recurConf = client.ServerConfig {
 	Network: "tcp",
-	Address: ":8766",
+	Address: ":8765",
 	RetCodeLen: 4,
 	Connections: 4,
 	PingInterval: time.Hour,
+	Timeout: 100*time.Millisecond,
 }
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
@@ -121,4 +139,5 @@ func main() {
 		pprof.WriteHeapProfile(f)
 		f.Close()
 	}
+	log.Println()
 }

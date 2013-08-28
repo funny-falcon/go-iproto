@@ -3,6 +3,7 @@ package iproto
 import (
 	"log"
 	"sync"
+	"time"
 )
 
 var _ = log.Print
@@ -14,11 +15,14 @@ type ParallelService struct {
 	sema     chan bool
 }
 
-func NewParallelService(n int, f func(*Request)) (serv *ParallelService) {
+func NewParallelService(n int, timeout time.Duration, f func(*Request)) (serv *ParallelService) {
 	if n == 0 {
 		n = 1
 	}
 	serv = &ParallelService{
+		SimplePoint: SimplePoint{
+			Timeout: timeout,
+		},
 		f:	f,
 		sema:     make(chan bool, n),
 	}
@@ -78,6 +82,7 @@ Loop:
 		}
 
 		if req.SetInFly(mid) {
+			req.SetTimeout(serv.Timeout)
 			go serv.f(req)
 		} else {
 			serv.sema <- true

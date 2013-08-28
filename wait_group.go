@@ -32,8 +32,9 @@ type WaitGroup struct {
 	responses []Response
 	ch        chan Response
 	w         *sync.Cond
-	kind      int32
 	timer     Timer
+	timerSet  bool
+	kind      int32
 	bodies	  []byte
 }
 
@@ -54,8 +55,13 @@ func (w *WaitGroup) Slice(n int) (r []byte) {
 	return
 }
 
-func (w *WaitGroup) SetITimeout(timeout time.Duration) {
-	if timeout > 0 && w.timer.E == nil {
+func (w *WaitGroup) TimeoutFrom(d Service) {
+	w.SetTimeout(d.DefaultTimeout())
+}
+
+func (w *WaitGroup) SetTimeout(timeout time.Duration) {
+	if timeout > 0 && !w.timerSet {
+		w.timerSet = true
 		w.timer.E = w
 		w.timer.After(timeout)
 	}
@@ -72,6 +78,7 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 		Msg:       msg,
 		Body:      body,
 		Responder: w,
+		timerSet:  w.timerSet,
 	}
 	atomic.AddUint32(&w.reqn, 1)
 	if w.kind & wgFailed != 0 {
