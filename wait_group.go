@@ -9,10 +9,15 @@ import (
 var _ = log.Print
 
 const (
-	wgInFly = iota
-	wgChan
+	wgInFly = 0
+	wgFailed = wgCancel | wgExpire
+)
+const (
+	wgChan = (1 << iota)
 	wgWait
-	wgExpired
+	wgCancel
+	wgExpire
+	wgFailPerformed
 )
 
 const (
@@ -68,13 +73,19 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 		Body:      body,
 		Responder: w,
 	}
-	w.reqn++
+	atomic.AddUint32(&w.reqn, 1)
+	if w.kind & wgFailed != 0 {
+		w.performFail(req)
+	}
 	return req
 }
 
 func (w *WaitGroup) Each() <-chan Response {
+	if w.kind & wgFailed != 0 {
+		w.performFailAll()
+	}
 	w.m.Lock()
-	w.kind = wgChan
+	w.kind |= wgChan
 	w.ch = make(chan Response, w.reqn)
 
 	for _, resp := range w.responses {
@@ -90,8 +101,11 @@ func (w *WaitGroup) Each() <-chan Response {
 }
 
 func (w *WaitGroup) Results() []Response {
+	if w.kind & wgFailed != 0 {
+		w.performFailAll()
+	}
 	w.m.Lock()
-	w.kind = wgWait
+	w.kind |= wgWait
 	w.w = sync.NewCond(&w.m)
 	if cap(w.responses) < int(w.reqn) {
 		tmp := make([]Response, len(w.responses), w.reqn)
@@ -125,11 +139,11 @@ func (w *WaitGroup) Respond(r Response) {
 func (w *WaitGroup) inc() {
 	if v := atomic.AddUint32(&w.c, 1); v == w.reqn {
 		w.m.Lock()
-		switch w.kind {
-		case wgChan:
+		switch {
+		case w.kind & wgChan != 0:
 			w.timer.Stop()
 			close(w.ch)
-		case wgWait:
+		case w.kind & wgWait != 0:
 			w.timer.Stop()
 			w.w.Signal()
 		}
@@ -139,11 +153,11 @@ func (w *WaitGroup) inc() {
 
 func (w *WaitGroup) incLocked() {
 	if v := atomic.AddUint32(&w.c, 1); v == w.reqn {
-		switch w.kind {
-		case wgChan:
+		switch {
+		case w.kind & wgChan != 0:
 			w.timer.Stop()
 			close(w.ch)
-		case wgWait:
+		case w.kind & wgWait != 0:
 			w.timer.Stop()
 			w.w.Signal()
 		}
@@ -155,51 +169,39 @@ func (w *WaitGroup) Cancel() {
 		return
 	}
 	w.m.Lock()
-	defer w.m.Unlock()
+	w.kind |= wgCancel
+	w.m.Unlock()
+}
 
-	w.timer.Stop()
-	for _, reqs := range w.requests {
+func (w *WaitGroup) performFailAll() {
+	reqn := int(w.reqn)
+	for row, reqs := range w.requests {
+		if row > (reqn-1) / wgBufSize {
+			break
+		}
 		for i := range reqs {
-			req := &reqs[i]
-			if req.state != RsNew && req.Cancel() {
-				w.incLocked()
+			if row * wgBufSize + i < reqn {
+				w.performFail(&reqs[i])
 			}
 		}
+	}
+	w.kind |= wgFailPerformed
+}
+
+func (w *WaitGroup) performFail(r *Request) {
+	switch {
+	case w.kind&wgCancel != 0:
+		r.Cancel()
+	case w.kind&wgExpire != 0:
+		r.Expire()
 	}
 }
 
 func (w *WaitGroup) Expire() {
-	w.timer.Stop()
 	if w.c == w.reqn {
 		return
 	}
-
-	requests := make([]*Request, 0, w.reqn)
 	w.m.Lock()
-	n := w.reqn
-	for _, reqs := range w.requests {
-		if n == 0 {
-			break
-		}
-		for i := range reqs {
-			if n == 0 {
-				break
-			}
-			req := &reqs[i]
-			state := req.state
-			if req.Responder == w && state == RsNew || state&(RsPending|RsInFly) != 0 {
-				requests = append(requests, req)
-			}
-			n--
-		}
-	}
-	if w.kind == wgInFly {
-		w.kind = wgExpired
-	}
+	w.kind |= wgExpire
 	w.m.Unlock()
-	for _, req := range requests {
-		if req != nil {
-			req.Expire()
-		}
-	}
 }

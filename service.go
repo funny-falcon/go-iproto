@@ -124,7 +124,7 @@ func (s *SimplePoint) SendWrapped(r *Request) {
 
 	if !r.SetPending() {
 		/* this could happen if SetDeadline already respond with timeout */
-		if r.state == RsPerformed || r.state == RsCanceled {
+		if r.Performed() {
 			return
 		}
 		log.Panicf("Request already sent somewhere %+v")
@@ -144,7 +144,7 @@ func (s *SimplePoint) Send(r *Request) {
 
 	if !r.SetPending() {
 		/* this could happen if SetDeadline already respond with timeout */
-		if r.state == RsPerformed || r.state == RsCanceled {
+		if r.Performed() {
 			return
 		}
 		log.Panicf("Request already sent somewhere %+v")
@@ -155,7 +155,7 @@ func (s *SimplePoint) Send(r *Request) {
 	}
 
 	/* this could happen if SetDeadline already respond with timeout */
-	if r.state == RsPerformed {
+	if r.Performed() {
 		return
 	}
 

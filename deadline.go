@@ -45,29 +45,22 @@ func (d *Deadline) sendExpired() {
 	if r == nil {
 		return
 	}
-	r.Lock()
-	defer r.Unlock()
+	d.timer = nil
 	if d.Request == r {
 		state := r.State()
-		if state == RsNew || state == RsPending {
-			res := Response{Id: r.Id, Msg: r.Msg, Code: RcSendTimeout}
-			r.ResponseInAMiddle(d, res)
-		} else if state == RsPrepared || state == RsPerformed {
-			return
-		} else if state == RsInFly && d.WorkTime == 0 {
-			d.doRecvExpired()
-		} else if recvRemains := d.Deadline.Sub(NowEpoch()); recvRemains <= 0 {
-			d.doRecvExpired()
-		} else {
-			d.timer = time.AfterFunc(recvRemains, d.recvExpired)
+		if state & RsNotWaiting == 0 {
+			r.Respond(RcTimeout, nil)
+		} else if state == RsInFly {
+			if d.WorkTime > 0 {
+				recvRemains := d.Deadline.Sub(NowEpoch())
+				if recvRemains > 0 {
+					d.timer = time.AfterFunc(recvRemains, d.recvExpired)
+					return
+				}
+			}
+			r.Respond(RcTimeout, nil)
 		}
 	}
-}
-
-func (d *Deadline) doRecvExpired() {
-	r := d.Request
-	res := Response{Id: r.Id, Msg: r.Msg, Code: RcRecvTimeout}
-	r.ResponseInAMiddle(d, res)
 }
 
 func (d *Deadline) recvExpired() {
@@ -75,23 +68,13 @@ func (d *Deadline) recvExpired() {
 	if r == nil {
 		return
 	}
-	r.Lock()
-	defer r.Unlock()
-	if d.Request == r {
-		state := r.State()
-		if state == RsNew || state == RsPending || state == RsInFly {
-			d.doRecvExpired()
-		}
-	}
+	d.timer = nil
+	r.Respond(RcTimeout, nil)
 }
 
 func (d *Deadline) Respond(res Response) Response {
-	d.timer.Stop()
-	return res
-}
-
-func (d *Deadline) Cancel() {
-	if d.timer != nil {
+	if t := d.timer; t != nil {
 		d.timer.Stop()
 	}
+	return res
 }

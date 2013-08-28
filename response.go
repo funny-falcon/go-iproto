@@ -15,8 +15,8 @@ const (
 	RcProtocolError
 	RcFailed
 	RcFatalError = RcShutdown - 255 - iota
-	RcSendTimeout
-	RcRecvTimeout
+	RcTimeout
+	RcCanceled
 	RcIOError
 	RcRestartable = RcShutdown - 512
 	RcInvalid     = RcRestartable
@@ -49,7 +49,6 @@ func (f Callback) Respond(r Response) {
 
 type Middleware interface {
 	Respond(Response) Response
-	Cancel()
 	valid() bool
 	setReq(req *Request, self Middleware)
 	unchain() Middleware
@@ -87,7 +86,4 @@ func (r *BasicResponder) valid() bool {
 
 func (r *BasicResponder) Respond(resp Response) Response {
 	return resp
-}
-
-func (r *BasicResponder) Cancel() {
 }

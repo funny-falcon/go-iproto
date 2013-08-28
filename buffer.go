@@ -18,10 +18,6 @@ func (b *bufResponder) Respond(r Response) Response {
 	return r
 }
 
-func (b *bufResponder) Cancel() {
-	b.state = bsFree
-}
-
 const (
 	bsNew = iota
 	bsSet
@@ -78,8 +74,11 @@ func (b *Buffer) push(r *Request) {
 	}
 
 	middle := &row.row[tail % bufRow]
-	r.ChainMiddleware(middle)
-	middle.state = bsSet
+	if r.ChainMiddleware(middle) {
+		middle.state = bsSet
+	} else {
+		middle.state = bsFree
+	}
 	select {
 	case b.set <- true:
 	default:

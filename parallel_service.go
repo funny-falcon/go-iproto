@@ -42,12 +42,6 @@ func (p* parMiddle) Respond(res Response) Response {
 	return res
 }
 
-func (p* parMiddle) Cancel() {
-	p.serv.Lock()
-	p.serv.sema<- true
-	p.serv.Unlock()
-}
-
 func (serv *ParallelService) Loop() {
 	var req *Request
 	var ok bool
