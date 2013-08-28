@@ -124,7 +124,6 @@ func (h *tHeap) push(t *Timer, e Epoch) bool {
 	l := uint32(len(h.h))
 	t.i = l
 	h.h = append(h.h, tItem{t: t, e: e})
-	//log.Println("push", h.h, l)
 	if l > 3 {
 		h.up(l)
 	}
@@ -133,7 +132,6 @@ func (h *tHeap) push(t *Timer, e Epoch) bool {
 
 func (h *tHeap) pop() {
 	l := len(h.h) - 1
-	//log.Println("pop", h.h, l)
 	t := &h.h[3]
 	t.t.i = 0
 	if l > 3 {
