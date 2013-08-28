@@ -55,14 +55,7 @@ func nextHeap() *tHeap {
 	i := atomic.AddUint32(&heapI, 1)
 	if i%10000 == 0 {
 		heapM.Lock()
-		n := runtime.GOMAXPROCS(-1)
-		if n == 1 {
-			n = 2
-		} else {
-			if n *= 4; n > 256 {
-				n = 256
-			}
-		}
+		n := runtime.GOMAXPROCS(-1) * 4
 		for len(heaps) < n {
 			heaps = append(heaps, newHeap(uint32(len(heaps)+1)))
 		}
@@ -155,15 +148,15 @@ func (h *tHeap) pop() {
 
 func (h *tHeap) remove(i uint32) {
 	l := uint32(len(h.h) - 1)
-	//log.Println("remove", h.h, i, l)
 	t := &h.h[i]
 	t.t.i = 0
 	if i < l {
 		*t = h.h[l]
 		t.t.i = i
 		h.chomp()
-		h.up(i)
-		h.down(i)
+		if !h.up(i) {
+			h.down(i)
+		}
 	} else {
 		h.chomp()
 	}
@@ -175,7 +168,7 @@ func (h *tHeap) chomp() {
 	h.h = h.h[:l]
 }
 
-func (th *tHeap) up(i uint32) {
+func (th *tHeap) up(i uint32) (up bool) {
 	h := th.h
 	t := h[i]
 	for {
@@ -183,12 +176,14 @@ func (th *tHeap) up(i uint32) {
 		if j == 2 || h[j].e <= t.e {
 			break
 		}
+		up = true
 		h[i] = h[j]
 		h[i].t.i = i
 		h[j] = t
 		t.t.i = j
 		i = j
 	}
+	return
 }
 
 func (th *tHeap) down(i uint32) {
@@ -202,14 +197,12 @@ func (th *tHeap) down(i uint32) {
 			break
 		}
 		e := h[j].e
-		if j+1 < l {
+		if j2 < l {
 			e1 := h[j+1].e
 			if e1 < e {
 				e = e1
 				j++
 			}
-		}
-		if j2 < l {
 			e2 := h[j2].e
 			if j2+1 < l {
 				e3 := h[j2+1].e
@@ -221,6 +214,12 @@ func (th *tHeap) down(i uint32) {
 			if e2 < e {
 				e = e2
 				j = j2
+			}
+		} else if j+1 < l {
+			e1 := h[j+1].e
+			if e1 < e {
+				e = e1
+				j++
 			}
 		}
 		if e >= t.e {
