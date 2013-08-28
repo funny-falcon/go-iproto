@@ -151,7 +151,7 @@ func (s *SimplePoint) Send(r *Request) {
 	}
 
 	if s.Timeout > 0 {
-		r.SetDeadline(NowEpoch().Add(s.Timeout), s.Worktime)
+		r.SetITimeout(s.Timeout)
 	}
 
 	/* this could happen if SetDeadline already respond with timeout */
