@@ -6,11 +6,13 @@ import (
 	"sync/atomic"
 	"time"
 )
+var _ = log.Print
 
 const (
 	wgInFly = iota
 	wgChan
 	wgWait
+	wgExpired
 )
 
 const (
@@ -27,9 +29,24 @@ type WaitGroup struct {
 	w         *sync.Cond
 	kind      int32
 	timer     Timer
+	bodies	  []byte
 }
 
 func (w *WaitGroup) Init() {
+	w.bodies = make([]byte, 64)
+}
+
+func (w *WaitGroup) Slice(n int) (r []byte) {
+	if len(w.bodies) < n {
+		s := n * 4
+		if s < 64 {
+			s = 64
+		}
+		w.bodies = make([]byte, s)
+	}
+	r = w.bodies[:n]
+	w.bodies = w.bodies[n:]
+	return
 }
 
 func (w *WaitGroup) SetITimeout(timeout time.Duration) {
@@ -177,6 +194,9 @@ func (w *WaitGroup) Expire() {
 			}
 			n--
 		}
+	}
+	if w.kind == wgInFly {
+		w.kind = wgExpired
 	}
 	w.m.Unlock()
 	for _, req := range requests {
