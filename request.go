@@ -29,20 +29,6 @@ type Request struct {
 	timer     Timer
 }
 
-func (r *Request) SetDeadline(deadline Epoch, worktime time.Duration) {
-	if !deadline.Zero() {
-		d := Deadline{Deadline: deadline, WorkTime: worktime}
-		d.Wrap(r)
-	}
-}
-
-func (r *Request) SetTimeout(timeout time.Duration, worktime time.Duration) {
-	if timeout > 0 {
-		d := Deadline{Deadline: NowEpoch().Add(timeout), WorkTime: worktime}
-		d.Wrap(r)
-	}
-}
-
 func (r *Request) SetITimeout(timeout time.Duration) {
 	if timeout > 0 && r.timer.E == nil {
 		r.timer.E = r
