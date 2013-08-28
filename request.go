@@ -111,7 +111,7 @@ func (r *Request) chainResponse(res Response) {
 		if r.state != RsPrepared {
 			return
 		}
-		chain = r.unchainMiddleware(chain)
+		chain = chain.unchain()
 	}
 	r.Responder.Respond(res)
 	r.state = RsPerformed
@@ -135,21 +135,6 @@ func (r *Request) ChainMiddleware(res Middleware) (chained bool) {
 		res.setReq(r, res)
 	}
 	r.Unlock()
-	return
-}
-
-func (r *Request) UnchainMiddleware(res Middleware) (un bool) {
-	r.Lock()
-	if r.chain == res {
-		un = true
-		r.unchainMiddleware(res)
-	}
-	r.Unlock()
-	return
-}
-
-func (r *Request) unchainMiddleware(res Middleware) (next Middleware) {
-	next = res.unchain()
 	return
 }
 

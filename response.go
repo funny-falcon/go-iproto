@@ -49,10 +49,8 @@ func (f Callback) Respond(r Response) {
 
 type Middleware interface {
 	Respond(Response) Response
-	valid() bool
 	setReq(req *Request, self Middleware)
 	unchain() Middleware
-	previous() Middleware
 }
 
 type BasicResponder struct {
@@ -74,14 +72,6 @@ func (r *BasicResponder) unchain() (prev Middleware) {
 	r.prev = nil
 	r.Request = nil
 	return
-}
-
-func (r *BasicResponder) previous() Middleware {
-	return r.prev
-}
-
-func (r *BasicResponder) valid() bool {
-	return r.Request != nil
 }
 
 func (r *BasicResponder) Respond(resp Response) Response {
