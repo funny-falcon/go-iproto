@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 )
+var _ = log.Print
 
 type notifyAction uint32
 
@@ -197,16 +198,10 @@ func (conn *Connection) readLoop() {
 			continue
 		}
 
-		req, row := conn.inFly.get(res.Id)
-		if req == nil {
-			log.Panicf("No mathing request: %v %v", res.Msg, res.Id)
-		}
-
-		if ireq := req.Request; ireq != nil {
+		if ireq := conn.inFly.remove(res.Id); ireq != nil {
+			res.Id = ireq.Id
 			ireq.Response(iproto.Response(res))
 		}
-
-		conn.inFly.putBack(req, row)
 	}
 }
 

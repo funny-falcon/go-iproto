@@ -7,6 +7,11 @@ import (
 	"log"
 )
 
+type Request struct {
+	iproto.BasicResponder
+	fakeId uint32
+}
+
 const (
 	rowLogN = 8
 	rowN = 1 << rowLogN
@@ -61,34 +66,33 @@ func (h *RequestHolder) getNext(conn *Connection) (req *Request) {
 	}
 }
 
-func (h *RequestHolder) get(id uint32) (req *Request, reqs *RequestRow) {
+func (h *RequestHolder) remove(fakeId uint32) (ireq *iproto.Request) {
 	var ok bool
-	big := id>>rowLogN
+	big := fakeId>>rowLogN
 	if h.lastBig != big {
 		h.Lock()
 		if h.last, ok = h.reqs[big]; !ok {
 			h.Unlock()
-			log.Panicf("Map has no RequestRow for %d", id)
+			log.Panicf("Map has no RequestRow for %d", fakeId)
 		}
 		h.lastBig = big
 		h.Unlock()
 	}
-	reqs = h.last
-	req = &reqs.reqs[id&rowMask]
-	return
-}
 
-func (h *RequestHolder) putBack(r *Request, reqs *RequestRow) {
-	big := r.fakeId>>rowLogN
-	reqs.reqs[r.fakeId&rowMask].fakeId = 0
-	border := big == 0 || big == uint32(iproto.PingRequestId>>8)
+	reqs := h.last
 	reqs.freed++
+	border := big == 0 || big == uint32(iproto.PingRequestId>>8)
 	if reqs.freed == rowN || (reqs.freed == rowN1 && border) {
 		h.Lock()
 		delete(h.reqs, big)
 		h.Unlock()
 	}
+
+	req := &reqs.reqs[fakeId&rowMask]
+	req.fakeId = 0
+	ireq = req.Request
 	atomic.AddUint32(&h.count, ^uint32(0))
+	return
 }
 
 func (h *RequestHolder) getAll() (reqs []*Request) {
