@@ -67,6 +67,7 @@ type PointLoop interface {
 type SimplePoint struct {
 	b Buffer
 	exit         chan bool
+	stopped        bool
 	standalone bool
 	PointLoop
 	Timeout      time.Duration
@@ -165,5 +166,10 @@ func (s *SimplePoint) Stop() {
 	if s.standalone {
 		s.b.close()
 	}
+	s.stopped = true
 	s.exit <- true
+}
+
+func (s *SimplePoint) Stopped() bool {
+	return s.stopped
 }

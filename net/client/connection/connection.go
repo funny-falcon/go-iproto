@@ -240,11 +240,9 @@ Loop:
 		var ping bool
 		var requestHeader nt.Request
 
-		select {
-		case <-conn.ExitChan():
+		if conn.Stopped() {
 			conn.shutdown = true
 			break Loop
-		default:
 		}
 
 		select {
