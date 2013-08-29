@@ -52,6 +52,8 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 		}
 	}()
 	var sum uint32
+	var sums [5]uint32
+	st := CHKNUM / len(sums)
 	result := iproto.RcOK
 
 	in_count++
@@ -59,24 +61,40 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 		log.Println("in count", in_count)
 	}
 
-	mr := cx.NewMulti()
-	mr.TimeoutFrom(ProxyTestService)
-	var body [4]byte
-	for i:=uint32(0); i<CHKNUM; i++ {
-		le.PutUint32(body[:], i*i)
-		req := mr.Request(OP_TEST, body[:])
-		ProxyTestService.Send(req)
+	for j := range sums {
+		cx.GoInt(func(cx *iproto.Context, j int) {
+			var s uint32
+
+			mr := cx.NewMulti()
+			mr.TimeoutFrom(ProxyTestService)
+			var body [4]byte
+			from := uint32(j*st) + uint32((CHKNUM+j-1)/len(sums)-st)
+			to := from + uint32((CHKNUM+j)/len(sums))
+			for i:=from; i<to; i++ {
+				le.PutUint32(body[:], i*i)
+				req := mr.Request(OP_TEST, body[:])
+				ProxyTestService.Send(req)
+			}
+
+			for _, res := range mr.Results() {
+				if res.Code != iproto.RcOK {
+					mr.Cancel()
+					result = RcError
+					//sum = ^uint32(0)
+					break
+				}
+				s += le.Uint32(res.Body)
+			}
+			sums[j] = s
+			cx.Done()
+		}, j)
+	}
+	cx.Wait()
+
+	for _, s := range sums {
+		sum += s
 	}
 
-	for _, res := range mr.Results() {
-		if res.Code != iproto.RcOK {
-			mr.Cancel()
-			result = RcError
-			//sum = ^uint32(0)
-			break
-		}
-		sum += le.Uint32(res.Body)
-	}
 	if result == RcError {
 		bad_count++
 		if bad_count % 1000 == 0 {
@@ -84,6 +102,7 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 		}
 	}
 
+	var body [4]byte
 	le.PutUint32(body[:], sum)
 	cx.Respond(0, body[:])
 })

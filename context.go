@@ -55,6 +55,8 @@ type Context struct {
 	// RetCode stores return code if case when original request were canceled or expired
 	*cxAsMid
 	RetCode
+	child sync.WaitGroup
+	parent *sync.WaitGroup
 	m sync.Mutex
 	cancels [2]Canceler
 	cancelsn int
@@ -210,4 +212,48 @@ func (c *Context) Alive() bool {
 
 func (c *Context) Timeout() bool {
 	return c.RetCode == RcTimeout
+}
+
+func (c *Context) Go(f func(cx *Context)) {
+	child := &Context{parent: &c.child}
+	c.AddCanceler(child)
+	c.child.Add(1)
+	go c.go_(child, f)
+}
+
+func (c *Context) go_(child *Context, f func(cx *Context)) {
+	defer c.RemoveCanceler(child)
+	f(child)
+}
+
+func (c *Context) GoInt(f func(*Context, int), i int) {
+	child := &Context{parent: &c.child}
+	c.AddCanceler(child)
+	c.child.Add(1)
+	go c.goInt(child, f, i)
+}
+
+func (c *Context) goInt(child *Context, f func(*Context, int), i int) {
+	defer c.RemoveCanceler(child)
+	f(child, i)
+}
+
+func (c *Context) GoRest(f func(*Context, ...interface{}), rest... interface{}) {
+	child := &Context{parent: &c.child}
+	c.AddCanceler(child)
+	c.child.Add(1)
+	go c.goRest(child, f, rest)
+}
+
+func (c *Context) goRest(child *Context, f func(*Context, ...interface{}), rest []interface{}) {
+	defer c.RemoveCanceler(child)
+	f(child, rest...)
+}
+
+func (c *Context) Wait() {
+	c.child.Wait()
+}
+
+func (c *Context) Done() {
+	c.parent.Done()
 }
