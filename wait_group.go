@@ -31,7 +31,7 @@ type WaitGroup struct {
 	requests  []*[wgBufSize]Request
 	responses []Response
 	ch        chan Response
-	w         *sync.Cond
+	w         sync.Cond
 	timer     Timer
 	timerSet  bool
 	kind      uint32
@@ -103,7 +103,7 @@ func (w *WaitGroup) Results() []Response {
 	}
 	w.m.Lock()
 	w.setKind(wgWait)
-	w.w = sync.NewCond(&w.m)
+	w.w.L = &w.m
 	if cap(w.responses) < int(w.r) {
 		tmp := make([]Response, len(w.responses), w.r)
 		copy(tmp, w.responses)

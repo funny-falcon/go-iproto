@@ -76,14 +76,14 @@ type tItem struct {
 
 type tHeap struct {
 	m sync.Mutex
-	c *sync.Cond
+	c sync.Cond
 	i uint32
 	h []tItem
 }
 
 func newHeap(i uint32) *tHeap {
 	h := &tHeap{i: i}
-	h.c = sync.NewCond(&h.m)
+	h.c.L = &h.m
 	h.h = make([]tItem, 3, 256)
 	go h.loop()
 	return h
