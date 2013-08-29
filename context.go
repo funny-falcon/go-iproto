@@ -9,19 +9,6 @@ const (
 	cxBodyBuf = 256
 )
 
-type Canceler interface {
-	Cancel()
-}
-
-type Context struct {
-	m sync.Mutex
-	cancels map[Canceler]struct{}
-	reqBuf []Request
-	reqId  uint32
-	cancelBuf []contextMiddleware
-	body []byte
-}
-
 type contextMiddleware struct {
 	Middleware
 	c *Context
@@ -38,6 +25,19 @@ func (cm *contextMiddleware) Cancel() {
 	if r := cm.Request; r != nil {
 		r.Cancel()
 	}
+}
+
+type Canceler interface {
+	Cancel()
+}
+
+type Context struct {
+	m sync.Mutex
+	cancels map[Canceler]struct{}
+	reqBuf []Request
+	reqId  uint32
+	cancelBuf []contextMiddleware
+	body []byte
 }
 
 func (c *Context) removeCanceler(cn Canceler) {
