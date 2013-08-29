@@ -9,7 +9,7 @@ import (
 var _ = log.Print
 
 type bufResponder struct {
-	BasicResponder
+	Middleware
 	state uint32
 }
 

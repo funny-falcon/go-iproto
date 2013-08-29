@@ -8,7 +8,7 @@ import (
 )
 
 type Request struct {
-	iproto.BasicResponder
+	iproto.Middleware
 	fakeId uint32
 }
 

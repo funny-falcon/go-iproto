@@ -47,26 +47,26 @@ func (f Callback) Respond(r Response) {
 	f(r)
 }
 
-type Middleware interface {
+type RequestMiddleware interface {
 	Respond(Response) Response
-	setReq(req *Request, self Middleware)
-	unchain() Middleware
+	setReq(req *Request, self RequestMiddleware)
+	unchain() RequestMiddleware
 }
 
-type BasicResponder struct {
+type Middleware struct {
 	Request *Request
-	prev    Middleware
+	prev    RequestMiddleware
 }
 
-// Chain integrates BasicResponder into callback chain
-func (r *BasicResponder) setReq(req *Request, self Middleware) {
+// Chain integrates Middleware into callback chain
+func (r *Middleware) setReq(req *Request, self RequestMiddleware) {
 	r.Request = req
 	r.prev = req.chain
 	req.chain = self
 }
 
-// Unchain removes BasicResponder from callback chain
-func (r *BasicResponder) unchain() (prev Middleware) {
+// Unchain removes Middleware from callback chain
+func (r *Middleware) unchain() (prev RequestMiddleware) {
 	prev = r.prev
 	r.Request.chain = prev
 	r.prev = nil
@@ -74,6 +74,6 @@ func (r *BasicResponder) unchain() (prev Middleware) {
 	return
 }
 
-func (r *BasicResponder) Respond(resp Response) Response {
+func (r *Middleware) Respond(resp Response) Response {
 	return resp
 }

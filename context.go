@@ -23,7 +23,7 @@ type Context struct {
 }
 
 type contextMiddleware struct {
-	BasicResponder
+	Middleware
 	c *Context
 }
 

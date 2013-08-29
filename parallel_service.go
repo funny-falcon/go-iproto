@@ -35,7 +35,7 @@ func NewParallelService(n int, timeout time.Duration, f func(*Request)) (serv *P
 }
 
 type parMiddle struct {
-	BasicResponder
+	Middleware
 	serv *ParallelService
 }
 
