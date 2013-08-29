@@ -51,7 +51,7 @@ var SumTestService = iproto.NewParallelService(512, time.Second, func(r *iproto.
 			log.Printf("PANICING %+v", m)
 		}
 	}()
-	var wg iproto.WaitGroup
+	var wg iproto.MultiRequest
 	var sum uint32
 	result := iproto.RcOK
 
@@ -61,10 +61,10 @@ var SumTestService = iproto.NewParallelService(512, time.Second, func(r *iproto.
 	}
 
 	wg.TimeoutFrom(ProxyTestService)
+	var body [4]byte
 	for i:=uint32(0); i<CHKNUM; i++ {
-		body := make([]byte, 4)
-		le.PutUint32(body, i*i)
-		req := wg.Request(OP_TEST, body)
+		le.PutUint32(body[:], i*i)
+		req := wg.Request(OP_TEST, body[:])
 		ProxyTestService.Send(req)
 	}
 
@@ -83,10 +83,8 @@ var SumTestService = iproto.NewParallelService(512, time.Second, func(r *iproto.
 		}
 	}
 
-	body := make([]byte, 4)
-	le.PutUint32(body, sum)
-	//r.Respond(result, body)
-	r.Respond(0, body)
+	le.PutUint32(body[:], sum)
+	r.Respond(0, body[:])
 })
 
 var ProxyTestService iproto.EndPoint

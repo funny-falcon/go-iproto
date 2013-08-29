@@ -10,25 +10,26 @@ import (
 var _ = log.Print
 
 const (
-	wgInFly  = 0
-	wgFailed = wgCancel | wgExpire
+	mrInFly  = 0
+	mrFailed = mrCancel | mrExpire
 )
 const (
-	wgChan = (1 << iota)
-	wgWait
-	wgCancel
-	wgExpire
-	wgFailPerformed
+	mrChan = (1 << iota)
+	mrWait
+	mrCancel
+	mrExpire
+	mrFailPerformed
 )
 
 const (
-	wgBufSize = 16
+	mrBufSize = 16
 )
 
-type WaitGroup struct {
+type MultiRequest struct {
+	cx        *Context
 	m         sync.Mutex
 	c, r      uint32
-	requests  []*[wgBufSize]Request
+	requests  []*Request
 	responses []Response
 	ch        chan Response
 	w         sync.Cond
@@ -38,15 +39,11 @@ type WaitGroup struct {
 	bodyn     uint32
 }
 
-func (w *WaitGroup) Slice(n int) (r []byte) {
-	return
-}
-
-func (w *WaitGroup) TimeoutFrom(d Service) {
+func (w *MultiRequest) TimeoutFrom(d Service) {
 	w.SetTimeout(d.DefaultTimeout())
 }
 
-func (w *WaitGroup) SetTimeout(timeout time.Duration) {
+func (w *MultiRequest) SetTimeout(timeout time.Duration) {
 	if timeout > 0 && !w.timerSet {
 		w.timerSet = true
 		w.timer.E = w
@@ -54,34 +51,33 @@ func (w *WaitGroup) SetTimeout(timeout time.Duration) {
 	}
 }
 
-func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
-	if w.r%wgBufSize == 0 {
+func (w *MultiRequest) Request(msg RequestType, body []byte) *Request {
+	if w.cx == nil {
+		w.cx = &Context{}
+	}
+	req := w.cx.request(uint32(len(w.requests)), msg, body)
+	req.Responder = w
+	req.timerSet = w.timerSet
+	if len(w.requests) == cap(w.requests) {
 		w.m.Lock()
-		w.requests = append(w.requests, &[wgBufSize]Request{})
+		w.requests = append(w.requests, req)
 		w.m.Unlock()
+	} else {
+		w.requests = append(w.requests, req)
 	}
-
-	req := &(*w.requests[w.r/wgBufSize])[w.r%wgBufSize]
-	*req = Request{
-		Id:        w.r,
-		Msg:       msg,
-		Body:      body,
-		Responder: w,
-		timerSet:  w.timerSet,
-	}
-	atomic.AddUint32(&w.r, 1)
-	if atomic.LoadUint32(&w.kind)&wgFailed != 0 {
+	atomic.StoreUint32(&w.r, uint32(len(w.requests)))
+	if atomic.LoadUint32(&w.kind)&mrFailed != 0 {
 		w.performFail(req)
 	}
 	return req
 }
 
-func (w *WaitGroup) Each() <-chan Response {
-	if w.kind&wgFailed != 0 && w.c != w.r {
+func (w *MultiRequest) Each() <-chan Response {
+	if w.kind&mrFailed != 0 && w.c != w.r {
 		w.performFailAll()
 	}
 	w.m.Lock()
-	w.setKind(wgChan)
+	w.setKind(mrChan)
 	w.ch = make(chan Response, w.r)
 
 	for _, resp := range w.responses {
@@ -96,15 +92,15 @@ func (w *WaitGroup) Each() <-chan Response {
 	return w.ch
 }
 
-func (w *WaitGroup) Results() []Response {
-	if w.kind&wgFailed != 0 && w.c != w.r {
+func (w *MultiRequest) Results() []Response {
+	if w.kind&mrFailed != 0 && w.c != w.r {
 		w.performFailAll()
 	}
 	w.m.Lock()
-	w.setKind(wgWait)
+	w.setKind(mrWait)
 	w.w.L = &w.m
-	if cap(w.responses) < int(w.r) {
-		tmp := make([]Response, len(w.responses), w.r)
+	if cap(w.responses) < len(w.requests) {
+		tmp := make([]Response, len(w.responses), len(w.requests))
 		copy(tmp, w.responses)
 		w.responses = tmp
 	}
@@ -117,12 +113,12 @@ func (w *WaitGroup) Results() []Response {
 	return res
 }
 
-func (w *WaitGroup) Respond(r Response) {
+func (w *MultiRequest) Respond(r Response) {
 	if w.ch == nil {
 		w.m.Lock()
 		if w.ch == nil {
 			w.responses = append(w.responses, r)
-			if w.c++; w.c == w.r && w.kind&wgWait != 0 {
+			if w.c++; w.c == w.r && w.kind&mrWait != 0 {
 				w.timer.Stop()
 				w.w.Signal()
 			}
@@ -138,49 +134,43 @@ func (w *WaitGroup) Respond(r Response) {
 	}
 }
 
-func (w *WaitGroup) Cancel() {
+func (w *MultiRequest) Cancel() {
 	if w.c == w.r {
 		return
 	}
-	w.setKind(wgCancel)
+	w.setKind(mrCancel)
 	w.performFailAll()
 }
 
-func (w *WaitGroup) Expire() {
+func (w *MultiRequest) Expire() {
 	if w.c == w.r {
 		return
 	}
-	w.setKind(wgExpire)
+	w.setKind(mrExpire)
 	w.performFailAll()
 }
 
-func (w *WaitGroup) performFailAll() {
+func (w *MultiRequest) performFailAll() {
 	w.m.Lock()
 	r := int(atomic.LoadUint32(&w.r))
 	allReqs := w.requests
 	w.m.Unlock()
-OUTER:
-	for row, reqs := range allReqs {
-		nn := row*wgBufSize
-		for i := range reqs {
-			if nn+i >= r {
-				break OUTER
-			}
-			w.performFail(&reqs[i])
-		}
+
+	for i:=0; i<r; i++ {
+		w.performFail(allReqs[i])
 	}
 }
 
-func (w *WaitGroup) performFail(r *Request) {
+func (w *MultiRequest) performFail(r *Request) {
 	switch {
-	case w.kind&wgCancel != 0:
+	case w.kind&mrCancel != 0:
 		r.Cancel()
-	case w.kind&wgExpire != 0:
+	case w.kind&mrExpire != 0:
 		r.Expire()
 	}
 }
 
-func (w *WaitGroup) setKind(k uint32) {
+func (w *MultiRequest) setKind(k uint32) {
 	kind := w.kind
 	for !atomic.CompareAndSwapUint32(&w.kind, kind, kind|k) {
 		kind = w.kind
