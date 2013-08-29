@@ -62,12 +62,12 @@ type PointLoop interface {
 }
 
 type SimplePoint struct {
-	b Buffer
-	exit         chan bool
-	stopped        bool
+	b          Buffer
+	exit       chan bool
+	stopped    bool
 	standalone bool
 	PointLoop
-	Timeout      time.Duration
+	Timeout time.Duration
 }
 
 var _ EndPoint = (*SimplePoint)(nil)
@@ -82,7 +82,7 @@ func (s *SimplePoint) Runned() bool {
 
 func (s *SimplePoint) Run(ch chan *Request) {
 	if ch == nil {
-		ch = make(chan *Request, 16 * 1024)
+		ch = make(chan *Request, 16*1024)
 		s.standalone = true
 		s.b.init()
 	}

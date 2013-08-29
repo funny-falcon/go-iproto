@@ -11,8 +11,8 @@ var _ = log.Print
 type ParallelService struct {
 	SimplePoint
 	sync.Mutex
-	f	func(*Request)
-	sema     chan bool
+	f    func(*Request)
+	sema chan bool
 }
 
 func NewParallelService(n int, timeout time.Duration, f func(*Request)) (serv *ParallelService) {
@@ -23,8 +23,8 @@ func NewParallelService(n int, timeout time.Duration, f func(*Request)) (serv *P
 		SimplePoint: SimplePoint{
 			Timeout: timeout,
 		},
-		f:	f,
-		sema:     make(chan bool, n),
+		f:    f,
+		sema: make(chan bool, n),
 	}
 	serv.SimplePoint.Init(serv)
 	for i := 0; i < n; i++ {
@@ -39,9 +39,9 @@ type parMiddle struct {
 	serv *ParallelService
 }
 
-func (p* parMiddle) Respond(res Response) Response {
+func (p *parMiddle) Respond(res Response) Response {
 	p.serv.Lock()
-	p.serv.sema<- true
+	p.serv.sema <- true
 	p.serv.Unlock()
 	return res
 }
@@ -96,4 +96,3 @@ Loop:
 		req.Respond(RcShutdown, nil)
 	}
 }
-

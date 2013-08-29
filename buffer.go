@@ -29,22 +29,22 @@ const (
 )
 
 type bufferRow struct {
-	id uint64
+	id  uint64
 	row [bufRow]bufResponder
 }
 
 type Buffer struct {
-	ch chan *Request
-	onExit func()
-	set chan bool
-	m sync.Mutex
-	rows map[uint64] *bufferRow
+	ch         chan *Request
+	onExit     func()
+	set        chan bool
+	m          sync.Mutex
+	rows       map[uint64]*bufferRow
 	head, tail uint64
 	hRow, tRow *bufferRow
 }
 
 func (b *Buffer) init() {
-	b.rows = make(map[uint64] *bufferRow)
+	b.rows = make(map[uint64]*bufferRow)
 	row := new(bufferRow)
 	b.hRow, b.tRow, b.rows[0] = row, row, row
 	b.set = make(chan bool, 1)
@@ -59,7 +59,7 @@ func (b *Buffer) push(r *Request) {
 		}
 	}
 
-	tail := atomic.AddUint64(&b.tail, 1)-1
+	tail := atomic.AddUint64(&b.tail, 1) - 1
 	big := tail / bufRow
 	row := b.tRow
 	if row.id != big {
@@ -73,7 +73,7 @@ func (b *Buffer) push(r *Request) {
 		b.m.Unlock()
 	}
 
-	middle := &row.row[tail % bufRow]
+	middle := &row.row[tail%bufRow]
 	if r.ChainMiddleware(middle) {
 		middle.state = bsSet
 	} else {
@@ -95,7 +95,7 @@ func (b *Buffer) close() {
 
 func (b *Buffer) loop() {
 	for <-b.set {
-		Tiny:
+	Tiny:
 		for ; b.head < atomic.LoadUint64(&b.tail); b.head++ {
 			var ok bool
 			big := b.head / bufRow
@@ -110,7 +110,7 @@ func (b *Buffer) loop() {
 				}
 				b.hRow = row
 			}
-			middle := &row.row[b.head % bufRow]
+			middle := &row.row[b.head%bufRow]
 			switch middle.state {
 			case bsNew:
 				break Tiny
