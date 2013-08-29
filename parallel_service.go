@@ -11,11 +11,11 @@ var _ = log.Print
 type ParallelService struct {
 	SimplePoint
 	sync.Mutex
-	f    func(*Request)
+	f    func(*Context)
 	sema chan bool
 }
 
-func NewParallelService(n int, timeout time.Duration, f func(*Request)) (serv *ParallelService) {
+func NewParallelService(n int, timeout time.Duration, f func(*Context)) (serv *ParallelService) {
 	if n == 0 {
 		n = 1
 	}
@@ -81,9 +81,10 @@ Loop:
 			break Loop
 		}
 
-		if req.SetInFly(mid) {
-			req.SetTimeout(serv.Timeout)
-			go serv.f(req)
+		if req.ChainMiddleware(mid) {
+			if ctx := req.Context(); ctx != nil {
+				go serv.f(ctx)
+			}
 		} else {
 			serv.sema <- true
 		}

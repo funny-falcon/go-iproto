@@ -90,7 +90,7 @@ func (r *Request) Canceled() bool {
 
 // ResetToPending is for ResendeRs on IOError. It should be called in a Responder.
 // Note, if it returns false, then Responder is already performed
-func (r *Request) ResetToPending(res Response, originalResponder Responder) bool {
+func (r *Request) ResetToPending() bool {
 	if r.state == RsPrepared {
 		r.state = RsPending
 		return true
@@ -143,6 +143,16 @@ func (r *Request) ChainMiddleware(res RequestMiddleware) (chained bool) {
 		res.setReq(r, res)
 	}
 	r.Unlock()
+	return
+}
+
+func (r *Request) Context() (cx *Context) {
+	cx = new(Context)
+	mid := &cxAsMid{cx: cx}
+	cx.cxAsMid = mid
+	if !r.SetInFly(mid) {
+		return nil
+	}
 	return
 }
 

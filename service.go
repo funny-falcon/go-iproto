@@ -17,7 +17,9 @@ type Service interface {
 type FuncMiddleService func(*Request)
 
 func (f FuncMiddleService) Send(r *Request) {
-	f(r)
+	if r.state == RsNew {
+		f(r)
+	}
 }
 
 func (f FuncMiddleService) Runned() bool {

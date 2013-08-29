@@ -14,6 +14,8 @@ const (
 	RcShutdown = ^RetCode(0) - iota
 	RcProtocolError
 	RcFailed
+)
+const (
 	RcFatalError = RcShutdown - 255 - iota
 	RcTimeout
 	RcCanceled
@@ -45,6 +47,12 @@ type Callback func(Response)
 
 func (f Callback) Respond(r Response) {
 	f(r)
+}
+
+type Chan chan Response
+
+func (ch Chan) Respond(r Response) {
+	ch <- r
 }
 
 type RequestMiddleware interface {

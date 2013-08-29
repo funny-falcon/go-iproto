@@ -45,13 +45,12 @@ var OpTestService = iproto.FuncEndService(func(r *iproto.Request) {
 
 var in_count = 0
 var bad_count = 0
-var SumTestService = iproto.NewParallelService(512, time.Second, func(r *iproto.Request) {
+var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(cx *iproto.Context) {
 	defer func() {
 		if m := recover(); m != nil {
 			log.Printf("PANICING %+v", m)
 		}
 	}()
-	var wg iproto.MultiRequest
 	var sum uint32
 	result := iproto.RcOK
 
@@ -60,18 +59,20 @@ var SumTestService = iproto.NewParallelService(512, time.Second, func(r *iproto.
 		log.Println("in count", in_count)
 	}
 
-	wg.TimeoutFrom(ProxyTestService)
+	mr := cx.NewMulti()
+	mr.TimeoutFrom(ProxyTestService)
 	var body [4]byte
 	for i:=uint32(0); i<CHKNUM; i++ {
 		le.PutUint32(body[:], i*i)
-		req := wg.Request(OP_TEST, body[:])
+		req := mr.Request(OP_TEST, body[:])
 		ProxyTestService.Send(req)
 	}
 
-	for _, res := range wg.Results() {
+	for _, res := range mr.Results() {
 		if res.Code != iproto.RcOK {
-			wg.Cancel()
+			mr.Cancel()
 			result = RcError
+			//sum = ^uint32(0)
 			break
 		}
 		sum += le.Uint32(res.Body)
@@ -84,7 +85,7 @@ var SumTestService = iproto.NewParallelService(512, time.Second, func(r *iproto.
 	}
 
 	le.PutUint32(body[:], sum)
-	r.Respond(0, body[:])
+	cx.Respond(0, body[:])
 })
 
 var ProxyTestService iproto.EndPoint

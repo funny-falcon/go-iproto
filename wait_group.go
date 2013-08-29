@@ -109,6 +109,7 @@ func (w *MultiRequest) Results() []Response {
 	}
 	res := w.responses
 	w.responses = nil
+	w.cx.RemoveCanceler(w)
 	w.m.Unlock()
 	return res
 }
@@ -118,6 +119,7 @@ func (w *MultiRequest) Respond(r Response) {
 		w.m.Lock()
 		if w.ch == nil {
 			w.responses = append(w.responses, r)
+			w.requests[r.Id] = nil
 			if w.c++; w.c == w.r && w.kind&mrWait != 0 {
 				w.timer.Stop()
 				w.w.Signal()
@@ -131,6 +133,7 @@ func (w *MultiRequest) Respond(r Response) {
 	if v := atomic.AddUint32(&w.c, 1); v == w.r {
 		w.timer.Stop()
 		close(w.ch)
+		w.cx.RemoveCanceler(w)
 	}
 }
 
@@ -157,7 +160,9 @@ func (w *MultiRequest) performFailAll() {
 	w.m.Unlock()
 
 	for i:=0; i<r; i++ {
-		w.performFail(allReqs[i])
+		if allReqs[i] != nil {
+			w.performFail(allReqs[i])
+		}
 	}
 }
 
