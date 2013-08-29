@@ -36,7 +36,6 @@ type WaitGroup struct {
 	timerSet  bool
 	kind      uint32
 	bodyn     uint32
-	body      *[128]byte
 }
 
 func (w *WaitGroup) Slice(n int) (r []byte) {
