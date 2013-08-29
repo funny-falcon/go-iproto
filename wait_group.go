@@ -60,7 +60,12 @@ func (w *MultiRequest) Request(msg RequestType, body []byte) *Request {
 	req.timerSet = w.timerSet
 	if len(w.requests) == cap(w.requests) {
 		w.m.Lock()
-		w.requests = append(w.requests, req)
+		if cap(w.requests) == 0 {
+			w.requests = make([]*Request, 1, cxReqBuf)
+			w.requests[0] = req
+		} else {
+			w.requests = append(w.requests, req)
+		}
 		w.m.Unlock()
 	} else {
 		w.requests = append(w.requests, req)
