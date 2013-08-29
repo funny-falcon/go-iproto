@@ -26,8 +26,8 @@ type Request struct {
 	Responder Responder
 	chain     Middleware
 	sync.Mutex
-	timer     Timer
-	timerSet  bool
+	timer    Timer
+	timerSet bool
 }
 
 func (r *Request) SetTimeout(timeout time.Duration) {
@@ -38,12 +38,12 @@ func (r *Request) SetTimeout(timeout time.Duration) {
 	}
 }
 
-//func (r *Request) sendExpired() {
 func (r *Request) Expire() {
-	state := atomic.LoadUint32(&r.state)
-	for state & RsPerforming == 0 {
-		r.Respond(RcTimeout, nil)
-	}
+	r.respondFail(RcTimeout)
+}
+
+func (r *Request) Cancel() {
+	r.respondFail(RcCanceled)
 }
 
 func (r *Request) State() uint32 {
@@ -77,13 +77,6 @@ func (r *Request) SetInFly(mid Middleware) (set bool) {
 		r.Unlock()
 	}
 	return
-}
-
-func (r *Request) Cancel() bool {
-	if r.state & RsPerforming == 0 {
-		r.Respond(RcTimeout, nil)
-	}
-	return false
 }
 
 func (r *Request) Performed() bool {
@@ -130,6 +123,19 @@ func (r *Request) Response(res Response) {
 	r.Unlock()
 }
 
+func (r *Request) Respond(code RetCode, body []byte) {
+	r.Response(Response{Id: r.Id, Msg: r.Msg, Code: code, Body: body})
+}
+
+func (r *Request) respondFail(code RetCode) {
+	r.Lock()
+	if r.state&RsPerforming == 0 {
+		res := Response{Id: r.Id, Msg: r.Msg, Code: code}
+		r.chainResponse(res)
+	}
+	r.Unlock()
+}
+
 func (r *Request) ChainMiddleware(res Middleware) (chained bool) {
 	r.Lock()
 	if r.state == RsNew || r.state == RsPending {
@@ -140,13 +146,9 @@ func (r *Request) ChainMiddleware(res Middleware) (chained bool) {
 	return
 }
 
-func (r *Request) Respond(code RetCode, body []byte) {
-	r.Response(Response{Id: r.Id, Msg: r.Msg, Code: code, Body: body})
-}
-
 const (
-	RsNew     = uint32(0)
-	RsNotWaiting = ^(RsNew|RsPending)
+	RsNew        = uint32(0)
+	RsNotWaiting = ^(RsNew | RsPending)
 	RsPerforming = RsPrepared | RsPerformed
 )
 const (

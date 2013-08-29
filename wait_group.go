@@ -6,10 +6,11 @@ import (
 	"sync/atomic"
 	"time"
 )
+
 var _ = log.Print
 
 const (
-	wgInFly = 0
+	wgInFly  = 0
 	wgFailed = wgCancel | wgExpire
 )
 const (
@@ -33,7 +34,9 @@ type WaitGroup struct {
 	w         *sync.Cond
 	timer     Timer
 	timerSet  bool
-	kind      int32
+	kind      uint32
+	bodyn     uint32
+	body      *[128]byte
 }
 
 func (w *WaitGroup) Slice(n int) (r []byte) {
@@ -54,7 +57,9 @@ func (w *WaitGroup) SetTimeout(timeout time.Duration) {
 
 func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 	if w.r%wgBufSize == 0 {
+		w.m.Lock()
 		w.requests = append(w.requests, &[wgBufSize]Request{})
+		w.m.Unlock()
 	}
 
 	req := &(*w.requests[w.r/wgBufSize])[w.r%wgBufSize]
@@ -66,18 +71,18 @@ func (w *WaitGroup) Request(msg RequestType, body []byte) *Request {
 		timerSet:  w.timerSet,
 	}
 	atomic.AddUint32(&w.r, 1)
-	if w.kind & wgFailed != 0 {
+	if atomic.LoadUint32(&w.kind)&wgFailed != 0 {
 		w.performFail(req)
 	}
 	return req
 }
 
 func (w *WaitGroup) Each() <-chan Response {
-	if w.kind & wgFailed != 0 {
+	if w.kind&wgFailed != 0 && w.c != w.r {
 		w.performFailAll()
 	}
 	w.m.Lock()
-	w.kind |= wgChan
+	w.setKind(wgChan)
 	w.ch = make(chan Response, w.r)
 
 	for _, resp := range w.responses {
@@ -93,11 +98,11 @@ func (w *WaitGroup) Each() <-chan Response {
 }
 
 func (w *WaitGroup) Results() []Response {
-	if w.kind & wgFailed != 0 {
+	if w.kind&wgFailed != 0 && w.c != w.r {
 		w.performFailAll()
 	}
 	w.m.Lock()
-	w.kind |= wgWait
+	w.setKind(wgWait)
 	w.w = sync.NewCond(&w.m)
 	if cap(w.responses) < int(w.r) {
 		tmp := make([]Response, len(w.responses), w.r)
@@ -118,7 +123,7 @@ func (w *WaitGroup) Respond(r Response) {
 		w.m.Lock()
 		if w.ch == nil {
 			w.responses = append(w.responses, r)
-			if w.c++; w.c == w.r && w.kind & wgWait != 0 {
+			if w.c++; w.c == w.r && w.kind&wgWait != 0 {
 				w.timer.Stop()
 				w.w.Signal()
 			}
@@ -138,24 +143,33 @@ func (w *WaitGroup) Cancel() {
 	if w.c == w.r {
 		return
 	}
-	w.m.Lock()
-	w.kind |= wgCancel
-	w.m.Unlock()
+	w.setKind(wgCancel)
+	w.performFailAll()
+}
+
+func (w *WaitGroup) Expire() {
+	if w.c == w.r {
+		return
+	}
+	w.setKind(wgExpire)
+	w.performFailAll()
 }
 
 func (w *WaitGroup) performFailAll() {
-	r := int(w.r)
-	for row, reqs := range w.requests {
-		if row > (r-1) / wgBufSize {
-			break
-		}
+	w.m.Lock()
+	r := int(atomic.LoadUint32(&w.r))
+	allReqs := w.requests
+	w.m.Unlock()
+OUTER:
+	for row, reqs := range allReqs {
+		nn := row*wgBufSize
 		for i := range reqs {
-			if row * wgBufSize + i < r {
-				w.performFail(&reqs[i])
+			if nn+i >= r {
+				break OUTER
 			}
+			w.performFail(&reqs[i])
 		}
 	}
-	w.kind |= wgFailPerformed
 }
 
 func (w *WaitGroup) performFail(r *Request) {
@@ -167,11 +181,9 @@ func (w *WaitGroup) performFail(r *Request) {
 	}
 }
 
-func (w *WaitGroup) Expire() {
-	if w.c == w.r {
-		return
+func (w *WaitGroup) setKind(k uint32) {
+	kind := w.kind
+	for !atomic.CompareAndSwapUint32(&w.kind, kind, kind|k) {
+		kind = w.kind
 	}
-	w.m.Lock()
-	w.kind |= wgExpire
-	w.m.Unlock()
 }
