@@ -68,8 +68,13 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 			mr := cx.NewMulti()
 			mr.TimeoutFrom(ProxyTestService)
 			var body [4]byte
-			from := uint32(j*st) + uint32((CHKNUM+j-1)/len(sums)-st)
-			to := from + uint32((CHKNUM+j)/len(sums))
+			mod := CHKNUM%len(sums)
+			add := 0
+			if mod+j >= len(sums) {
+				add = (mod+j) % len(sums)
+			}
+			from := uint32(j*st) + uint32(add)
+			to := from + uint32(st + (mod+j)/len(sums))
 			for i:=from; i<to; i++ {
 				le.PutUint32(body[:], i*i)
 				req := mr.Request(OP_TEST, body[:])
