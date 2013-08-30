@@ -39,11 +39,10 @@ type parMiddle struct {
 	serv *ParallelService
 }
 
-func (p *parMiddle) Respond(res Response) Response {
+func (p *parMiddle) Respond(res *Response) {
 	p.serv.Lock()
 	p.serv.sema <- true
 	p.serv.Unlock()
-	return res
 }
 
 func (serv *ParallelService) Loop() {

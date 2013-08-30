@@ -17,11 +17,10 @@ type contextMiddleware struct {
 	c *Context
 }
 
-func (cm *contextMiddleware) Respond(res Response) Response {
+func (cm *contextMiddleware) Respond(res *Response) {
 	if c := cm.c; c != nil {
 		c.RemoveCanceler(cm)
 	}
-	return res
 }
 
 func (cm *contextMiddleware) Cancel() {
@@ -39,7 +38,7 @@ type cxAsMid struct {
 	cx *Context
 }
 
-func (cm *cxAsMid) Respond(res Response) Response {
+func (cm *cxAsMid) Respond(res *Response) {
 	cx := cm.cx
 	if res.Code == RcCanceled {
 		cx.Cancel()
@@ -48,7 +47,6 @@ func (cm *cxAsMid) Respond(res Response) Response {
 		cm.Request.ResetToPending()
 		cm.Request.SetInFly(nil)
 	}
-	return res
 }
 
 type Context struct {
@@ -62,6 +60,7 @@ type Context struct {
 	cancelsn int
 	cancelsm map[Canceler]struct{}
 	reqBuf []Request
+	resBuf []Response
 	reqId  uint32
 	cancelBuf []contextMiddleware
 	body []byte
@@ -150,7 +149,7 @@ func (c *Context) Respond(code RetCode, body []byte) {
 	}
 }
 
-func (c *Context) NewRequest(msg RequestType, body []byte) (r *Request, res <-chan Response) {
+func (c *Context) NewRequest(msg RequestType, body []byte) (r *Request, res <-chan *Response) {
 	c.reqId++
 	r = c.request(c.reqId, msg, body)
 	ch := make(Chan, 1)
@@ -174,6 +173,7 @@ func (c *Context) NewRequest(msg RequestType, body []byte) (r *Request, res <-ch
 func (c *Context) request(id uint32, msg RequestType, body []byte) (r *Request) {
 	if len(c.reqBuf) == 0 {
 		c.reqBuf = make([]Request, cxReqBuf)
+		c.resBuf = make([]Response, cxReqBuf)
 	}
 
 	if len(body) > len(c.body) {
@@ -189,6 +189,8 @@ func (c *Context) request(id uint32, msg RequestType, body []byte) (r *Request) 
 	c.reqBuf = c.reqBuf[1:]
 	r.Id = id
 	r.Msg = msg
+	r.Response = &c.resBuf[0]
+	c.resBuf = c.resBuf[1:]
 
 	r.Body = c.body[:len(body)]
 	c.body = c.body[len(body):]

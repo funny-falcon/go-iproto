@@ -69,15 +69,15 @@ func (conn *Connection) Stop() {
 	conn.conn.CloseRead()
 }
 
-func (conn *Connection) Respond(r iproto.Response) {
+func (conn *Connection) Respond(r *iproto.Response) {
 	var ok bool
 	conn.Lock()
 	if _, ok = conn.inFly[r.Id]; ok {
 		delete(conn.inFly, r.Id)
 		select {
-		case conn.out <- nt.Response(r):
+		case conn.out <- nt.Response(*r):
 		default:
-			conn.buf = append(conn.buf, nt.Response(r))
+			conn.buf = append(conn.buf, nt.Response(*r))
 			conn.bufRealCap = cap(conn.buf)
 		}
 	}

@@ -23,6 +23,7 @@ type Request struct {
 	Id        uint32
 	state     uint32
 	Body      []byte
+	Response  *Response
 	Responder Responder
 	chain     RequestMiddleware
 	sync.Mutex
@@ -99,10 +100,17 @@ func (r *Request) ResetToPending() bool {
 	return false
 }
 
-func (r *Request) chainResponse(res Response) {
+func (r *Request) chainResponse(code RetCode, body []byte) {
+	if r.Response == nil {
+		r.Response = &Response{Id: r.Id, Msg: r.Msg}
+	}
+	r.Response.Code = code
+	r.Response.Body = body
+	res := r.Response
+
 	r.state = RsPrepared
 	for chain := r.chain; chain != nil; {
-		res = chain.Respond(res)
+		chain.Respond(res)
 		if r.state != RsPrepared {
 			return
 		}
@@ -115,23 +123,18 @@ func (r *Request) chainResponse(res Response) {
 	r.timer.Stop()
 }
 
-func (r *Request) Response(res Response) {
+func (r *Request) Respond(code RetCode, body []byte) {
 	r.Lock()
 	if r.state == RsInFly {
-		r.chainResponse(res)
+		r.chainResponse(code, body)
 	}
 	r.Unlock()
-}
-
-func (r *Request) Respond(code RetCode, body []byte) {
-	r.Response(Response{Id: r.Id, Msg: r.Msg, Code: code, Body: body})
 }
 
 func (r *Request) respondFail(code RetCode) {
 	r.Lock()
 	if r.state&RsPerforming == 0 {
-		res := Response{Id: r.Id, Msg: r.Msg, Code: code}
-		r.chainResponse(res)
+		r.chainResponse(code, nil)
 	}
 	r.Unlock()
 }

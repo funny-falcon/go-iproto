@@ -13,9 +13,8 @@ type bufResponder struct {
 	state uint32
 }
 
-func (b *bufResponder) Respond(r Response) Response {
+func (b *bufResponder) Respond(r *Response) {
 	b.state = bsFree
-	return r
 }
 
 const (

@@ -30,8 +30,8 @@ type MultiRequest struct {
 	m         sync.Mutex
 	c, r      uint32
 	requests  []*Request
-	responses []Response
-	ch        chan Response
+	responses []*Response
+	ch        chan *Response
 	w         sync.Cond
 	timer     Timer
 	timerSet  bool
@@ -77,13 +77,13 @@ func (w *MultiRequest) Request(msg RequestType, body []byte) *Request {
 	return req
 }
 
-func (w *MultiRequest) Each() <-chan Response {
+func (w *MultiRequest) Each() <-chan *Response {
 	if w.kind&mrFailed != 0 && w.c != w.r {
 		w.performFailAll()
 	}
 	w.m.Lock()
 	w.setKind(mrChan)
-	w.ch = make(chan Response, w.r)
+	w.ch = make(chan *Response, w.r)
 
 	for _, resp := range w.responses {
 		w.requests[resp.Id] = nil
@@ -97,7 +97,7 @@ func (w *MultiRequest) Each() <-chan Response {
 	return w.ch
 }
 
-func (w *MultiRequest) Results() []Response {
+func (w *MultiRequest) Results() []*Response {
 	if w.kind&mrFailed != 0 && w.c != w.r {
 		w.performFailAll()
 	}
@@ -105,7 +105,7 @@ func (w *MultiRequest) Results() []Response {
 	w.setKind(mrWait)
 	w.w.L = &w.m
 	if cap(w.responses) < len(w.requests) {
-		tmp := make([]Response, len(w.responses), len(w.requests))
+		tmp := make([]*Response, len(w.responses), len(w.requests))
 		copy(tmp, w.responses)
 		w.responses = tmp
 	}
@@ -119,7 +119,7 @@ func (w *MultiRequest) Results() []Response {
 	return res
 }
 
-func (w *MultiRequest) Respond(r Response) {
+func (w *MultiRequest) Respond(r *Response) {
 	if w.ch == nil {
 		w.m.Lock()
 		if w.ch == nil {

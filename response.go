@@ -40,23 +40,23 @@ func (res *Response) Restartable() bool {
 }
 
 type Responder interface {
-	Respond(Response)
+	Respond(*Response)
 }
 
-type Callback func(Response)
+type Callback func(*Response)
 
-func (f Callback) Respond(r Response) {
+func (f Callback) Respond(r *Response) {
 	f(r)
 }
 
-type Chan chan Response
+type Chan chan *Response
 
-func (ch Chan) Respond(r Response) {
+func (ch Chan) Respond(r *Response) {
 	ch <- r
 }
 
 type RequestMiddleware interface {
-	Respond(Response) Response
+	Respond(*Response)
 	setReq(req *Request, self RequestMiddleware)
 	unchain() RequestMiddleware
 }
@@ -82,6 +82,5 @@ func (r *Middleware) unchain() (prev RequestMiddleware) {
 	return
 }
 
-func (r *Middleware) Respond(resp Response) Response {
-	return resp
+func (r *Middleware) Respond(resp *Response) {
 }
