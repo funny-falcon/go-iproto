@@ -154,27 +154,6 @@ func (c *Context) Respond(code RetCode, body []byte) {
 	}
 }
 
-func (c *Context) NewRequest(msg RequestType, body []byte) (r *Request, res <-chan *Response) {
-	c.reqId++
-	r = c.request(c.reqId, msg, body)
-	ch := make(Chan, 1)
-	res, r.Responder = ch, ch
-
-	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
-	if rc == RcCanceled || rc == RcTimeout {
-		r.Cancel()
-	} else {
-		if len(c.cancelBuf) == 0 {
-			c.cancelBuf = make([]contextMiddleware, cxReqBuf)
-		}
-		m := &c.cancelBuf[0]
-		c.cancelBuf = c.cancelBuf[1:]
-		r.ChainMiddleware(m)
-		c.AddCanceler(m)
-	}
-	return
-}
-
 func (c *Context) request(id uint32, msg RequestType, body []byte) (r *Request) {
 	if len(c.reqBuf) == 0 {
 		c.reqBuf = make([]Request, cxReqBuf)
@@ -202,6 +181,27 @@ func (c *Context) request(id uint32, msg RequestType, body []byte) (r *Request) 
 	return
 }
 
+func (c *Context) NewRequest(msg RequestType, body []byte) (r *Request, res <-chan *Response) {
+	c.reqId++
+	r = c.request(c.reqId, msg, body)
+	ch := make(Chan, 1)
+	res, r.Responder = ch, ch
+
+	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
+	if rc == RcCanceled || rc == RcTimeout {
+		r.Cancel()
+	} else {
+		if len(c.cancelBuf) == 0 {
+			c.cancelBuf = make([]contextMiddleware, cxReqBuf)
+		}
+		m := &c.cancelBuf[0]
+		c.cancelBuf = c.cancelBuf[1:]
+		r.ChainMiddleware(m)
+		c.AddCanceler(m)
+	}
+	return
+}
+
 func (c *Context) NewMulti() (multi *MultiRequest) {
 	multi = &MultiRequest{cx: c}
 	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
@@ -211,6 +211,19 @@ func (c *Context) NewMulti() (multi *MultiRequest) {
 		c.AddCanceler(multi)
 	}
 	return multi
+}
+
+func (c *Context) Send(serv Service, msg RequestType, body []byte) (res <-chan *Response) {
+	var req *Request
+	req, res = c.NewRequest(msg, body)
+	serv.Send(req)
+	return res
+}
+
+func (c *Context) Call(serv Service, msg RequestType, body []byte) *Response {
+	req, res := c.NewRequest(msg, body)
+	serv.Send(req)
+	return <-res
 }
 
 func (c *Context) Alive() bool {
