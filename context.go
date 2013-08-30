@@ -64,7 +64,7 @@ type Context struct {
 	resBuf []Response
 	reqId  uint32
 	cancelBuf []contextMiddleware
-	body []byte
+	writer Writer
 }
 
 func (c *Context) RemoveCanceler(cn Canceler) {
@@ -154,20 +154,14 @@ func (c *Context) Respond(code RetCode, body []byte) {
 	}
 }
 
-func (c *Context) request(id uint32, msg RequestType, body []byte) (r *Request) {
+func (c *Context) request(id uint32, msg RequestType, val interface{}) (r *Request) {
 	if len(c.reqBuf) == 0 {
 		c.reqBuf = make([]Request, cxReqBuf)
 		c.resBuf = make([]Response, cxReqBuf)
 	}
 
-	if len(body) > len(c.body) {
-		n := cxBodyBuf
-		if n < len(body) {
-			n = len(body)
-		}
-		c.body = make([]byte, n)
-	}
-	copy(c.body, body)
+	c.writer.Write(val)
+	body := c.writer.Written()
 
 	r = &c.reqBuf[0]
 	c.reqBuf = c.reqBuf[1:]
@@ -176,12 +170,11 @@ func (c *Context) request(id uint32, msg RequestType, body []byte) (r *Request) 
 	r.Response = &c.resBuf[0]
 	c.resBuf = c.resBuf[1:]
 
-	r.Body = c.body[:len(body)]
-	c.body = c.body[len(body):]
+	r.Body = body
 	return
 }
 
-func (c *Context) NewRequest(msg RequestType, body []byte) (r *Request, res <-chan *Response) {
+func (c *Context) NewRequest(msg RequestType, body interface{}) (r *Request, res <-chan *Response) {
 	c.reqId++
 	r = c.request(c.reqId, msg, body)
 	ch := make(Chan, 1)
@@ -213,14 +206,14 @@ func (c *Context) NewMulti() (multi *MultiRequest) {
 	return multi
 }
 
-func (c *Context) Send(serv Service, msg RequestType, body []byte) (res <-chan *Response) {
+func (c *Context) Send(serv Service, msg RequestType, body interface{}) (res <-chan *Response) {
 	var req *Request
 	req, res = c.NewRequest(msg, body)
 	serv.Send(req)
 	return res
 }
 
-func (c *Context) Call(serv Service, msg RequestType, body []byte) *Response {
+func (c *Context) Call(serv Service, msg RequestType, body interface{}) *Response {
 	req, res := c.NewRequest(msg, body)
 	serv.Send(req)
 	return <-res

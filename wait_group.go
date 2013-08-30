@@ -51,7 +51,7 @@ func (w *MultiRequest) SetTimeout(timeout time.Duration) {
 	}
 }
 
-func (w *MultiRequest) Request(msg RequestType, body []byte) *Request {
+func (w *MultiRequest) Request(msg RequestType, body interface{}) *Request {
 	if w.cx == nil {
 		w.cx = &Context{}
 	}
