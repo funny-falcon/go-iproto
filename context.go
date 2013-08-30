@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	cxReqBuf = 32
+	cxReqBuf = 16
 	cxBodyBuf = 256
 )
 
