@@ -74,8 +74,7 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 		}
 	}()
 	var sum uint32
-	var sums [1]uint32
-	st := CHKNUM / len(sums)
+	sums := make(chan uint32, 1)
 	result := iproto.RcOK
 
 	in_count++
@@ -83,20 +82,16 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 		log.Println("in count", in_count)
 	}
 
-	for j := range sums {
+	for beg, j := 0, 0; j < cap(sums); j++ {
+		end := beg + (CHKNUM+j)/cap(sums)
 		cx.GoInt(func(cx *iproto.Context, ji interface{}) {
 			var s uint32
-			j := ji.(int)
+			j := ji.([2]int)
+			from, to := uint32(j[0]), uint32(j[1])
 
 			mr := cx.NewMulti()
 			mr.TimeoutFrom(ProxyTestService)
-			mod := CHKNUM%len(sums)
-			add := 0
-			if mod+j >= len(sums) {
-				add = (mod+j) % len(sums)
-			}
-			from := uint32(j*st) + uint32(add)
-			to := from + uint32(st + (mod+j)/len(sums))
+
 			for i:=from; i<to; i++ {
 				//req := mr.Request(OP_TEST, i*i)
 				req := mr.Request(OP_TEST, Req{J: i*i})
@@ -118,12 +113,14 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 				}
 				s += i.J
 			}
-			sums[j] = s
-		}, j)
+			sums <- s
+		}, [2]int{beg, end})
+		beg = end
 	}
 	cx.WaitAll()
+	close(sums)
 
-	for _, s := range sums {
+	for s := range sums {
 		sum += s
 	}
 
