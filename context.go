@@ -39,8 +39,9 @@ type cxAsMid struct {
 }
 
 func (cm *cxAsMid) Respond(res *Response) {
-	cx := cm.cx
-	if res.Code == RcCanceled {
+	if cx := cm.cx; cx == nil {
+		return
+	} else if res.Code == RcCanceled {
 		cx.Cancel()
 	} else if res.Code == RcTimeout {
 		cx.Expire()
