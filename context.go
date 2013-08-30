@@ -145,11 +145,13 @@ func (c *Context) Expire() {
 	}
 }
 
-func (c *Context) Respond(code RetCode, body []byte) {
+func (c *Context) Respond(code RetCode, val interface{}) {
 	if c.cxAsMid == nil {
 		log.Panicf("Context has no binded request")
 	}
 	if req := c.Request; req != nil {
+		c.writer.Write(val)
+		body := c.writer.Written()
 		req.Respond(code, body)
 	}
 }

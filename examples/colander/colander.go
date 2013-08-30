@@ -45,6 +45,28 @@ var OpTestService = iproto.FuncEndService(func(r *iproto.Request) {
 
 var in_count = 0
 var bad_count = 0
+
+type Req struct {
+	J uint32
+}
+
+// Uncomment to speedup
+/*func (r Req) IWrite(o interface{}, w *iproto.Writer) error {
+	w.Uint32(o.(Req).J)
+	return nil
+}*/
+
+type Res struct {
+	J uint32
+}
+
+// Uncomment to speedup
+/*func (r *Res) IRead(o interface{}, read iproto.Reader) (rest iproto.Reader, err error) {
+	r.J, rest, err = read.Uint32()
+	return
+}*/
+
+
 var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(cx *iproto.Context) {
 	defer func() {
 		if m := recover(); m != nil {
@@ -52,7 +74,7 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 		}
 	}()
 	var sum uint32
-	var sums [5]uint32
+	var sums [1]uint32
 	st := CHKNUM / len(sums)
 	result := iproto.RcOK
 
@@ -68,7 +90,6 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 
 			mr := cx.NewMulti()
 			mr.TimeoutFrom(ProxyTestService)
-			var body [4]byte
 			mod := CHKNUM%len(sums)
 			add := 0
 			if mod+j >= len(sums) {
@@ -77,8 +98,8 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 			from := uint32(j*st) + uint32(add)
 			to := from + uint32(st + (mod+j)/len(sums))
 			for i:=from; i<to; i++ {
-				le.PutUint32(body[:], i*i)
-				req := mr.Request(OP_TEST, body[:])
+				//req := mr.Request(OP_TEST, i*i)
+				req := mr.Request(OP_TEST, Req{J: i*i})
 				ProxyTestService.Send(req)
 			}
 
@@ -86,10 +107,16 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 				if res.Code != iproto.RcOK {
 					mr.Cancel()
 					result = RcError
-					//sum = ^uint32(0)
 					break
 				}
-				s += le.Uint32(res.Body)
+				var i Res
+				if _, err := res.Body.Read(&i); err != nil {
+					log.Print(err)
+					mr.Cancel()
+					result = RcError
+					break
+				}
+				s += i.J
 			}
 			sums[j] = s
 		}, j)
@@ -107,9 +134,7 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 		}
 	}
 
-	var body [4]byte
-	le.PutUint32(body[:], sum)
-	cx.Respond(0, body[:])
+	cx.Respond(0, sum)
 })
 
 var ProxyTestService iproto.EndPoint

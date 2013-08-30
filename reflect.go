@@ -6,7 +6,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 )
+
+var _ = log.Print
 
 const (
 	wDefaultBuf = 512
@@ -14,8 +17,10 @@ const (
 
 var le = binary.LittleEndian
 
-type Marshaler interface {
+type IWriter interface {
 	IWrite(self interface{}, w *Writer) error
+}
+type IReader interface {
 	IRead(self interface{}, r Reader) (rest Reader, err error)
 }
 
@@ -335,15 +340,15 @@ func (w *Writer) Write(i interface{}) (err error) {
 		w.Uint64sl(o)
 	case []int64:
 		w.Int64sl(o)
-	case Marshaler:
+	case IWriter:
 		err = o.IWrite(o, w)
-	case []Marshaler:
+	case []IWriter:
 		for _, v := range o {
 			err = v.IWrite(v, w)
 		}
 	default:
 		v := reflect.ValueOf(i)
-		err = w.Reflect(v)
+		_, err = w.Reflect(v, iNotImplements)
 	}
 	if err != nil {
 		w.Reset()
@@ -351,11 +356,22 @@ func (w *Writer) Write(i interface{}) (err error) {
 	return
 }
 
-var marshaler = reflect.TypeOf(Marshaler(nil))
+var _iwrite *IWriter = new(IWriter)
+var iwriter = reflect.TypeOf(_iwrite).Elem()
+var _iread *IReader = new(IReader)
+var ireader = reflect.TypeOf(_iread).Elem()
 
-func (w *Writer) Reflect(v reflect.Value) (err error) {
-	if t := v.Type(); t.Implements(marshaler) {
-		o := v.Interface().(Marshaler)
+type Implements int
+const (
+	iUnknown = Implements(iota)
+	iImplements
+	iNotImplements
+)
+
+func (w *Writer) Reflect(v reflect.Value, impl Implements) (imp Implements, err error) {
+	if impl == iUnknown && v.Type().Implements(iwriter) || impl == iImplements {
+		imp = iImplements
+		o := v.Interface().(IWriter)
 		err = o.IWrite(o, w)
 		return
 	}
@@ -367,7 +383,10 @@ func (w *Writer) Reflect(v reflect.Value) (err error) {
 	}
 
 	switch v.Kind() {
-	case reflect.Array, reflect.Slice:
+	case reflect.Array:
+		v = v.Slice(0, v.Len())
+		fallthrough
+	case reflect.Slice:
 		et := t.Elem()
 		switch et.Kind() {
 		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
@@ -376,16 +395,15 @@ func (w *Writer) Reflect(v reflect.Value) (err error) {
 			return
 		}
 		l := v.Len()
+		impl = iUnknown
 		for i:=0; i < l && err == nil; i++ {
-			err = w.Reflect(v.Index(i))
+			impl, err = w.Reflect(v.Index(i), impl)
 		}
 
 	case reflect.Struct:
 		l := t.NumField()
 		for i:=0; i < l && err == nil; i++ {
-			if f := v.Field(i); f.CanSet() {
-				err = w.Reflect(v)
-			}
+			_, err = w.Reflect(v.Field(i), iUnknown)
 		}
 
 	case reflect.Int8:
@@ -625,7 +643,7 @@ func (r Reader) Read(i interface{}) (rest Reader, err error) {
 		rest, err = r.Int64sl(o)
 	case []uint64:
 		rest, err = r.Uint64sl(o)
-	case Marshaler:
+	case IReader:
 		rest, err = o.IRead(o, r)
 	default:
 		// Fallback to reflect-based decoding.
@@ -638,14 +656,15 @@ func (r Reader) Read(i interface{}) (rest Reader, err error) {
 		default:
 			return nil, errors.New("iproto.Reader: invalid type " + d.Type().String())
 		}
-		rest, err = r.Reflect(v)
+		_, rest, err = r.Reflect(v, iNotImplements)
 	}
 	return
 }
 
-func (r Reader) Reflect(v reflect.Value) (rest Reader, err error) {
-	if t := v.Type(); t.Implements(marshaler) {
-		v := v.Interface().(Marshaler)
+func (r Reader) Reflect(v reflect.Value, impl Implements) (imp Implements, rest Reader, err error) {
+	if impl == iUnknown && v.Type().Implements(ireader) || impl == iImplements {
+		imp = iImplements
+		v := v.Interface().(IReader)
 		rest, err = v.IRead(v, r)
 		return
 	}
@@ -665,8 +684,9 @@ func (r Reader) Reflect(v reflect.Value) (rest Reader, err error) {
 
 		l := v.Len()
 		rest = r
+		impl = iUnknown
 		for i := 0; i < l && err != nil; i++ {
-			rest, err = rest.Reflect(v.Index(i))
+			impl, rest, err = rest.Reflect(v.Index(i), impl)
 		}
 
 	case reflect.Struct:
@@ -674,7 +694,7 @@ func (r Reader) Reflect(v reflect.Value) (rest Reader, err error) {
 		rest = r
 		for i := 0; i < l; i++ {
 			if v := v.Field(i); v.CanSet() {
-				rest, err = rest.Reflect(v)
+				_, rest, err = rest.Reflect(v, iUnknown)
 			}
 		}
 
@@ -730,6 +750,8 @@ func (r Reader) Reflect(v reflect.Value) (rest Reader, err error) {
 		if i, rest, err = r.Float64(); err == nil {
 			v.SetFloat(i)
 		}
+	default:
+		err = errors.New("iproto.Writer: wrong type "+v.Type().String())
 	}
 	return
 }
