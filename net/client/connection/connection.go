@@ -166,15 +166,13 @@ func (conn *Connection) flushInFly() {
 	reqs := conn.inFly.getAll()
 	conn.inFly = RequestHolder{}
 
-	resp := iproto.Response{Code: iproto.RcIOError}
+	code := iproto.RcIOError
 	if conn.shutdown {
-		resp.Code = iproto.RcShutdown
+		code = iproto.RcShutdown
 	}
 	for _, req := range reqs {
 		if request := req.Request; request != nil {
-			resp.Msg = request.Msg
-			resp.Id = req.fakeId
-			request.Response(resp)
+			request.Respond(code, nil)
 		}
 	}
 }
@@ -200,8 +198,7 @@ func (conn *Connection) readLoop() {
 		}
 
 		if ireq := conn.inFly.remove(res.Id); ireq != nil {
-			res.Id = ireq.Id
-			ireq.Response(iproto.Response(res))
+			ireq.Respond(res.Code, res.Body)
 		}
 		if conn.State & CsWriteClosed != 0 && conn.inFly.put >= conn.inFly.got {
 			conn.notifyLoop(readEmpty)
