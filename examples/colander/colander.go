@@ -62,8 +62,9 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 	}
 
 	for j := range sums {
-		cx.GoInt(func(cx *iproto.Context, j int) {
+		cx.GoInt(func(cx *iproto.Context, ji interface{}) {
 			var s uint32
+			j := ji.(int)
 
 			mr := cx.NewMulti()
 			mr.TimeoutFrom(ProxyTestService)
@@ -91,10 +92,9 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 				s += le.Uint32(res.Body)
 			}
 			sums[j] = s
-			cx.Done()
 		}, j)
 	}
-	cx.Wait()
+	cx.WaitAll()
 
 	for _, s := range sums {
 		sum += s

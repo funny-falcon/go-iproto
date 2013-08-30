@@ -53,9 +53,9 @@ type Context struct {
 	// RetCode stores return code if case when original request were canceled or expired
 	*cxAsMid
 	RetCode
-	child sync.WaitGroup
-	parent *sync.WaitGroup
+	parent *Context
 	m sync.Mutex
+	child sync.Cond
 	cancels [2]Canceler
 	cancelsn int
 	cancelsm map[Canceler]struct{}
@@ -79,12 +79,16 @@ func (c *Context) RemoveCanceler(cn Canceler) {
 	if i == len(c.cancels) {
 		delete(c.cancelsm, cn)
 	}
+	if c.cancelsn == 0 && len(c.cancelsm) == 0 {
+		c.child.Signal()
+	}
 	c.m.Unlock()
 }
 
 func (c *Context) AddCanceler(cn Canceler) {
 	var ok bool
 	c.m.Lock()
+	c.child.L = &c.m
 	ok = c.RetCode != RcCanceled && c.RetCode != RcTimeout
 	if ok {
 		var i int
@@ -217,45 +221,47 @@ func (c *Context) Timeout() bool {
 }
 
 func (c *Context) Go(f func(cx *Context)) {
-	child := &Context{parent: &c.child}
+	child := &Context{parent: c}
 	c.AddCanceler(child)
-	c.child.Add(1)
-	go c.go_(child, f)
+	go child.go_(f)
 }
 
-func (c *Context) go_(child *Context, f func(cx *Context)) {
-	defer c.RemoveCanceler(child)
+func (child *Context) go_(f func(cx *Context)) {
+	defer child.parent.RemoveCanceler(child)
 	f(child)
 }
 
-func (c *Context) GoInt(f func(*Context, int), i int) {
-	child := &Context{parent: &c.child}
+func (c *Context) GoInt(f func(*Context, interface{}), i interface{}) {
+	child := &Context{parent: c}
 	c.AddCanceler(child)
-	c.child.Add(1)
-	go c.goInt(child, f, i)
+	go child.goInt(f, i)
 }
 
-func (c *Context) goInt(child *Context, f func(*Context, int), i int) {
-	defer c.RemoveCanceler(child)
+func (child *Context) goInt(f func(*Context, interface{}), i interface{}) {
+	defer child.parent.RemoveCanceler(child)
 	f(child, i)
 }
 
-func (c *Context) GoRest(f func(*Context, ...interface{}), rest... interface{}) {
-	child := &Context{parent: &c.child}
+func (c *Context) WaitAll() {
+	c.m.Lock()
+	for c.cancelsn != 0 || len(c.cancelsm) > 0 {
+		c.child.Wait()
+	}
+	c.m.Unlock()
+}
+
+func (c *Context) GoAsync(f func(cx *Context)) {
+	child := &Context{parent: c}
 	c.AddCanceler(child)
-	c.child.Add(1)
-	go c.goRest(child, f, rest)
+	go f(child)
 }
 
-func (c *Context) goRest(child *Context, f func(*Context, ...interface{}), rest []interface{}) {
-	defer c.RemoveCanceler(child)
-	f(child, rest...)
+func (c *Context) GoIntAsync(f func(*Context, interface{}), i interface{}) {
+	child := &Context{parent: c}
+	c.AddCanceler(child)
+	go f(child, i)
 }
 
-func (c *Context) Wait() {
-	c.child.Wait()
-}
-
-func (c *Context) Done() {
-	c.parent.Done()
+func (child *Context) Done() {
+	child.parent.RemoveCanceler(child)
 }
