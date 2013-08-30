@@ -17,7 +17,8 @@ type BufWriter struct {
 
 func (w *BufWriter) Write(body []byte) (err error) {
 	bl := len(body)
-	if w.wr + bl > len(w.buf) {
+	l := len(w.buf)
+	if w.wr + bl > l || (bl > l / 4 && w.wr > l / 4) {
 		if err = w.Flush(); err != nil {
 			return err
 		}
