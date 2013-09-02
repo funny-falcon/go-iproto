@@ -732,9 +732,30 @@ func (r Reader) Reflect(v reflect.Value, impl Implements) (imp Implements, rest 
 	return
 }
 
-func (r Reader) IWriter(self interface{}, w *Writer) error {
+func (r Reader) IWrite(self interface{}, w *Writer) error {
 	w.Bytes([]byte(r))
 	return nil
+}
+
+type Struct struct{}
+func (s Struct) IWrite(self interface{}, w *Writer) (err error) {
+	v := reflect.ValueOf(self)
+	_, err = w.Reflect(v, iNotImplements)
+	return
+}
+
+func (s Struct) IRead(self interface{}, r Reader) (rest Reader, err error) {
+	var v reflect.Value
+	switch d := reflect.ValueOf(self); d.Kind() {
+	case reflect.Ptr:
+		v = d.Elem()
+	case reflect.Slice:
+		v = d
+	default:
+		return nil, errors.New("iproto.Reader: invalid type " + d.Type().String())
+	}
+	_, rest, err = r.Reflect(v, iNotImplements)
+	return
 }
 
 type iwriterWrap struct {
@@ -745,7 +766,11 @@ func (wrap iwriterWrap) IWrite(o interface{}, w *Writer) error {
 }
 
 func Wrap2IWriter(i interface{}) (IWriter, error) {
-	return iwriterWrap{i}, nil
+	if wr, ok := i.(IWriter); ok {
+		return wr, nil
+	} else {
+		return iwriterWrap{i}, nil
+	}
 }
 
 type ireaderWrap struct {

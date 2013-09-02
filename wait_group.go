@@ -78,11 +78,7 @@ func (w *MultiRequest) Request(msg RequestType, body IWriter) *Request {
 }
 
 func (w *MultiRequest) SendMsgBody(serv Service, msg RequestType, body interface{}) *Request {
-	var wr IWriter
-	var ok bool
-	if wr, ok = body.(IWriter); !ok {
-		wr, _ = Wrap2IWriter(body)
-	}
+	wr, _ := Wrap2IWriter(body)
 	req := w.Request(msg, wr)
 	serv.Send(req)
 	return req
