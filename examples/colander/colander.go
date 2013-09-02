@@ -24,16 +24,18 @@ const (
 
 var le = binary.LittleEndian
 
-var RootService = iproto.FuncMiddleService(func(r *iproto.Request) {
+var RootService = iproto.FuncMiddleService(rootService)
+func rootService(r *iproto.Request) {
 	switch r.Msg {
 	case OP_TEST:
 		OpTestService.Send(r)
 	case OP_SUMTEST:
 		SumTestService.Send(r)
 	}
-})
+}
 
-var OpTestService = iproto.FuncEndService(func(r *iproto.Request) {
+var OpTestService = iproto.FuncEndService(opTestService)
+func opTestService(r *iproto.Request) {
 	if len(r.Body) != 4 {
 		r.Respond(RcError, nil)
 	}
@@ -41,7 +43,7 @@ var OpTestService = iproto.FuncEndService(func(r *iproto.Request) {
 	result := make([]byte, 4)
 	le.PutUint32(result, num)
 	r.Respond(iproto.RcOK, result)
-})
+}
 
 var in_count = 0
 var bad_count = 0
@@ -70,7 +72,8 @@ func (r *Res) IRead(o interface{}, read iproto.Reader) (rest iproto.Reader, err 
 }
 
 
-var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(cx *iproto.Context) {
+var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, sumTestService)
+func sumTestService(cx *iproto.Context) {
 	defer func() {
 		if m := recover(); m != nil {
 			log.Printf("PANICING %+v", m)
@@ -135,7 +138,7 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 	}
 
 	cx.Respond(0, sum)
-})
+}
 
 var ProxyTestService iproto.EndPoint
 
