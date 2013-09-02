@@ -26,6 +26,7 @@ type IReader interface {
 
 type Writer struct {
 	buf []byte
+	defSize int
 }
 
 func (w *Writer) Written() (res []byte) {
@@ -54,7 +55,10 @@ func ceilLog(n int) int {
 func (w *Writer) ensure(n int) (l int) {
 	if cap(w.buf) - len(w.buf) < n {
 		newCap := len(w.buf) + n
-		if newCap < wDefaultBuf {
+		if w.defSize == 0 {
+			w.defSize = wDefaultBuf
+		}
+		if newCap < w.defSize {
 			newCap = wDefaultBuf
 		}
 		tmp := make([]byte, len(w.buf), ceilLog(newCap))

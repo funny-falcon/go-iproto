@@ -9,7 +9,6 @@ import (
 
 const (
 	cxReqBuf = 16
-	cxBodyBuf = 256
 )
 
 type contextMiddleware struct {
@@ -150,9 +149,10 @@ func (c *Context) Respond(code RetCode, val interface{}) {
 		log.Panicf("Context has no binded request")
 	}
 	if req := c.Request; req != nil {
-		c.writer.Write(val)
-		body := c.writer.Written()
-		req.Respond(code, body)
+		c.writer = Writer{}
+		w := Writer{defSize: 64}
+		w.Write(val)
+		req.Respond(code, w.Written())
 	}
 }
 
