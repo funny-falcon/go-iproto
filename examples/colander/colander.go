@@ -94,8 +94,7 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 
 			for i:=from; i<to; i++ {
 				//req := mr.Request(OP_TEST, i*i)
-				req := mr.Request(OP_TEST, Req{J: i*i})
-				ProxyTestService.Send(req)
+				mr.Send(ProxyTestService, OP_TEST, Req{J: i*i})
 			}
 
 			for _, res := range mr.Results() {

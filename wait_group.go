@@ -77,6 +77,12 @@ func (w *MultiRequest) Request(msg RequestType, body interface{}) *Request {
 	return req
 }
 
+func (w *MultiRequest) Send(srv Service, msg RequestType, body interface{}) uint32 {
+	req := w.Request(msg, body)
+	srv.Send(req)
+	return req.Id
+}
+
 func (w *MultiRequest) Each() <-chan *Response {
 	if w.kind&mrFailed != 0 && w.c != w.r {
 		w.performFailAll()

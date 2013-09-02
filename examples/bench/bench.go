@@ -121,8 +121,7 @@ func main() {
 				mr := cx.NewMulti()
 				for j:=0; j < batch && i+j<n; j++ {
 					epochs[j] = iproto.NowEpoch()
-					req := mr.Request(action, body)
-					point.Send(req)
+					mr.Send(point, action, body)
 				}
 				for _, res := range mr.Results() {
 					locaccum.Epoch(iproto.NowEpoch().Sub(epochs[res.Id]), res.Valid())
