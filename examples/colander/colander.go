@@ -46,25 +46,28 @@ var OpTestService = iproto.FuncEndService(func(r *iproto.Request) {
 var in_count = 0
 var bad_count = 0
 
-type Req struct {
+type OpTestReq struct {
 	J uint32
 }
 
-// Uncomment to speedup
-/*func (r Req) IWrite(o interface{}, w *iproto.Writer) error {
-	w.Uint32(o.(Req).J)
+func (r *OpTestReq) IMsg() iproto.RequestType {
+	return OP_TEST
+}
+
+func (r *OpTestReq) IWrite(o interface{}, w *iproto.Writer) error {
+	w.Uint32(o.(*OpTestReq).J)
 	return nil
-}*/
+}
 
 type Res struct {
 	J uint32
 }
 
 // Uncomment to speedup
-/*func (r *Res) IRead(o interface{}, read iproto.Reader) (rest iproto.Reader, err error) {
+func (r *Res) IRead(o interface{}, read iproto.Reader) (rest iproto.Reader, err error) {
 	r.J, rest, err = read.Uint32()
 	return
-}*/
+}
 
 
 var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(cx *iproto.Context) {
@@ -92,9 +95,10 @@ var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, func(c
 			mr := cx.NewMulti()
 			mr.TimeoutFrom(ProxyTestService)
 
+			var req OpTestReq
 			for i:=from; i<to; i++ {
-				//req := mr.Request(OP_TEST, i*i)
-				mr.Send(ProxyTestService, OP_TEST, Req{J: i*i})
+				req.J = i*i
+				mr.Send(ProxyTestService, &req)
 			}
 
 			for _, res := range mr.Results() {

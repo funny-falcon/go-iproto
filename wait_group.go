@@ -77,10 +77,16 @@ func (w *MultiRequest) Request(msg RequestType, body interface{}) *Request {
 	return req
 }
 
-func (w *MultiRequest) Send(srv Service, msg RequestType, body interface{}) uint32 {
+func (w *MultiRequest) SendMsgBody(serv Service, msg RequestType, body interface{}) uint32 {
 	req := w.Request(msg, body)
-	srv.Send(req)
+	serv.Send(req)
 	return req.Id
+}
+
+func (w *MultiRequest) Send(serv Service, r RequestData) (res <-chan *Response) {
+	req := w.Request(r.IMsg(), r)
+	serv.Send(req)
+	return res
 }
 
 func (w *MultiRequest) Each() <-chan *Response {

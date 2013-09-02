@@ -18,6 +18,11 @@ const (
 	PingRequestId = ^uint32(0)
 )
 
+type RequestData interface {
+	IMsg() RequestType
+	IWriter
+}
+
 type Request struct {
 	Msg       RequestType
 	Id        uint32

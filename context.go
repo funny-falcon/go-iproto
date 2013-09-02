@@ -208,15 +208,28 @@ func (c *Context) NewMulti() (multi *MultiRequest) {
 	return multi
 }
 
-func (c *Context) Send(serv Service, msg RequestType, body interface{}) (res <-chan *Response) {
+func (c *Context) SendMsgBody(serv Service, msg RequestType, body interface{}) (res <-chan *Response) {
 	var req *Request
 	req, res = c.NewRequest(msg, body)
 	serv.Send(req)
 	return res
 }
 
-func (c *Context) Call(serv Service, msg RequestType, body interface{}) *Response {
+func (c *Context) CallMsgBody(serv Service, msg RequestType, body interface{}) *Response {
 	req, res := c.NewRequest(msg, body)
+	serv.Send(req)
+	return <-res
+}
+
+func (c *Context) Send(serv Service, r RequestData) (res <-chan *Response) {
+	var req *Request
+	req, res = c.NewRequest(r.IMsg(), r)
+	serv.Send(req)
+	return res
+}
+
+func (c *Context) Call(serv Service, r RequestData) *Response {
+	req, res := c.NewRequest(r.IMsg(), r)
 	serv.Send(req)
 	return <-res
 }
