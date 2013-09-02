@@ -24,7 +24,7 @@ const (
 
 var le = binary.LittleEndian
 
-var RootService = iproto.FuncMiddleService(rootService)
+var RootService = iproto.Route(rootService)
 func rootService(r *iproto.Request) {
 	switch r.Msg {
 	case OP_TEST:
@@ -34,7 +34,7 @@ func rootService(r *iproto.Request) {
 	}
 }
 
-var OpTestService = iproto.FuncEndService(opTestService)
+var OpTestService = iproto.SF(opTestService)
 func opTestService(r *iproto.Request) {
 	if len(r.Body) != 4 {
 		r.Respond(RcError, nil)
@@ -65,14 +65,13 @@ type Res struct {
 	J uint32
 }
 
-// Uncomment to speedup
 func (r *Res) IRead(o interface{}, read iproto.Reader) (rest iproto.Reader, err error) {
 	r.J, rest, err = read.Uint32()
 	return
 }
 
 
-var SumTestService = iproto.NewParallelService(512, 100*time.Millisecond, sumTestService)
+var SumTestService = iproto.BF{N: 512, Timeout: 100*time.Millisecond}.New(sumTestService)
 func sumTestService(cx *iproto.Context) {
 	defer func() {
 		if m := recover(); m != nil {

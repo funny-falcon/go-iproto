@@ -14,35 +14,35 @@ type Service interface {
 	Runned() bool
 }
 
-type FuncMiddleService func(*Request)
+type Route func(*Request)
 
-func (f FuncMiddleService) Send(r *Request) {
+func (f Route) Send(r *Request) {
 	if r.state == RsNew {
 		f(r)
 	}
 }
 
-func (f FuncMiddleService) Runned() bool {
+func (f Route) Runned() bool {
 	return true
 }
 
-func (f FuncMiddleService) DefaultTimeout() time.Duration {
+func (f Route) DefaultTimeout() time.Duration {
 	return 0
 }
 
-type FuncEndService func(*Request)
+type SF func(*Request)
 
-func (f FuncEndService) Send(r *Request) {
+func (f SF) Send(r *Request) {
 	if r.SetPending() && r.SetInFly(nil) {
 		f(r)
 	}
 }
 
-func (f FuncEndService) Runned() bool {
+func (f SF) Runned() bool {
 	return true
 }
 
-func (f FuncEndService) DefaultTimeout() time.Duration {
+func (f SF) DefaultTimeout() time.Duration {
 	return 0
 }
 

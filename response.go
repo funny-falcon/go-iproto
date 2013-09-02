@@ -11,17 +11,19 @@ type RetCode uint32
 // RcCanceled - ...
 const (
 	RcOK       = RetCode(0)
-	RcShutdown = ^RetCode(0) - iota
-	RcProtocolError
-	RcFailed
+        RcTemporary = RetCode(1)
+        RcFatal    = RetCode(2)
+        RcKindMask = RetCode(3)
+)
+
+const (
+	RcShutdown = RcFatal | (0xff00)
+	RcProtocolError = RcFatal | (0x0300)
 )
 const (
-	RcFatalError = RcShutdown - 255 - iota
-	RcTimeout
-	RcCanceled
-	RcIOError
-	RcRestartable = RcShutdown - 512
-	RcInvalid     = RcRestartable
+	RcTimeout = 0x0c00 | RcTemporary
+	RcCanceled = 0xff00 | RcTemporary
+	RcIOError = 0xfe00 | RcTemporary
 )
 
 type Response struct {
@@ -32,11 +34,11 @@ type Response struct {
 }
 
 func (res *Response) Valid() bool {
-	return res.Code < RcInvalid
+	return res.Code & RcKindMask == 0
 }
 
 func (res *Response) Restartable() bool {
-	return res.Code < RcFatalError
+	return res.Code & RcKindMask == RcTemporary
 }
 
 type Responder interface {

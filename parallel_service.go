@@ -8,30 +8,35 @@ import (
 
 var _ = log.Print
 
+type BF struct {
+	N int
+	Timeout time.Duration
+}
+
+func (b BF) New(f func(*Context)) (serv *ParallelService) {
+	if b.N == 0 {
+		b.N = 1
+	}
+	serv = &ParallelService{
+		SimplePoint: SimplePoint{
+			Timeout: b.Timeout,
+		},
+		f:    f,
+		sema: make(chan bool, b.N),
+	}
+	serv.SimplePoint.Init(serv)
+	for i := 0; i < b.N; i++ {
+		serv.sema <- true
+	}
+	Run(serv)
+	return
+}
+
 type ParallelService struct {
 	SimplePoint
 	sync.Mutex
 	f    func(*Context)
 	sema chan bool
-}
-
-func NewParallelService(n int, timeout time.Duration, f func(*Context)) (serv *ParallelService) {
-	if n == 0 {
-		n = 1
-	}
-	serv = &ParallelService{
-		SimplePoint: SimplePoint{
-			Timeout: timeout,
-		},
-		f:    f,
-		sema: make(chan bool, n),
-	}
-	serv.SimplePoint.Init(serv)
-	for i := 0; i < n; i++ {
-		serv.sema <- true
-	}
-	Run(serv)
-	return
 }
 
 type parMiddle struct {
