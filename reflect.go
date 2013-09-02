@@ -26,18 +26,16 @@ type IReader interface {
 
 type Writer struct {
 	buf []byte
-	l int
 }
 
 func (w *Writer) Written() (res []byte) {
-	res = w.buf[:w.l]
-	w.buf = w.buf[w.l:]
-	w.l = 0
+	res = w.buf
+	w.buf = w.buf[len(w.buf):]
 	return
 }
 
 func (w *Writer) Reset() {
-	w.l = 0
+	w.buf = w.buf[:0]
 	return
 }
 
@@ -53,94 +51,83 @@ func ceilLog(n int) int {
 	return (n+1) << 2
 }
 
-func (w *Writer) ensure(n int) {
-	if len(w.buf) - w.l < n {
-		newLen := w.l + n
-		if newLen > wDefaultBuf {
-			newLen = ceilLog(newLen)
-		} else {
-			newLen = wDefaultBuf
+func (w *Writer) ensure(n int) (l int) {
+	if cap(w.buf) - len(w.buf) < n {
+		newCap := len(w.buf) + n
+		if newCap < wDefaultBuf {
+			newCap = wDefaultBuf
 		}
-		tmp := make([]byte, ceilLog(newLen))
-		copy(tmp, w.buf[:w.l])
+		tmp := make([]byte, len(w.buf), ceilLog(newCap))
+		copy(tmp, w.buf)
 		w.buf = tmp
 	}
-}
-
-func (w *Writer) Need(n int) (res []byte) {
-	w.ensure(n)
-	res = w.buf[w.l:]
-	w.l += n
+	l = len(w.buf)
+	w.buf = w.buf[:len(w.buf)+n]
 	return
 }
 
+func (w *Writer) Need(n int) []byte {
+	l := w.ensure(n)
+	return w.buf[l:]
+}
+
 func (w *Writer) Uint8(i uint8) {
-	w.ensure(1)
-	w.buf[w.l] = i
-	w.l++
+	l := w.ensure(1)
+	w.buf[l] = i
 	return
 }
 
 func (w *Writer) Int8(i int8) {
-	w.ensure(1)
-	w.buf[w.l] = uint8(i)
-	w.l++
+	l := w.ensure(1)
+	w.buf[l] = uint8(i)
 	return
 }
 
 func (w *Writer) Uint16(i uint16) {
-	w.ensure(2)
-	le.PutUint16(w.buf[w.l:], i)
-	w.l+=2
+	l := w.ensure(2)
+	le.PutUint16(w.buf[l:], i)
 	return
 }
 
 func (w *Writer) Int16(i int16) {
-	w.ensure(2)
-	le.PutUint16(w.buf[w.l:], uint16(i))
-	w.l+=2
+	l := w.ensure(2)
+	le.PutUint16(w.buf[l:], uint16(i))
 	return
 }
 
 func (w *Writer) Uint32(i uint32) {
-	w.ensure(4)
-	le.PutUint32(w.buf[w.l:], i)
-	w.l+=4
+	l := w.ensure(4)
+	le.PutUint32(w.buf[l:], i)
 	return
 }
 
 func (w *Writer) Int32(i int32) {
-	w.ensure(4)
-	le.PutUint32(w.buf[w.l:], uint32(i))
-	w.l+=4
+	l := w.ensure(4)
+	le.PutUint32(w.buf[l:], uint32(i))
 	return
 }
 
 func (w *Writer) Uint64(i uint64) {
-	w.ensure(8)
-	le.PutUint64(w.buf[w.l:], i)
-	w.l+=8
+	l := w.ensure(8)
+	le.PutUint64(w.buf[l:], i)
 	return
 }
 
 func (w *Writer) Int64(i int64) {
-	w.ensure(8)
-	le.PutUint64(w.buf[w.l:], uint64(i))
-	w.l+=8
+	l := w.ensure(8)
+	le.PutUint64(w.buf[l:], uint64(i))
 	return
 }
 
 func (w *Writer) Float32(i float32) {
-	w.ensure(4)
-	le.PutUint32(w.buf[w.l:], math.Float32bits(i))
-	w.l+=4
+	l := w.ensure(4)
+	le.PutUint32(w.buf[l:], math.Float32bits(i))
 	return
 }
 
 func (w *Writer) Float64(i float64) {
-	w.ensure(8)
-	le.PutUint64(w.buf[w.l:], math.Float64bits(i))
-	w.l+=8
+	l := w.ensure(8)
+	le.PutUint64(w.buf[l:], math.Float64bits(i))
 	return
 }
 
@@ -148,22 +135,19 @@ func (w *Writer) Uint64var(i uint64) {
 	var n int
 	switch {
 	case i < 1<<7:
-		w.ensure(1)
-		w.buf[w.l] = uint8(i)
-		w.l++
+		l := w.ensure(1)
+		w.buf[l] = uint8(i)
 		return
 	case i < 1<<14:
-		w.ensure(2)
-		w.buf[w.l] = 0x80 | uint8(i>>7)
-		w.buf[w.l+1] = uint8(i&0x7f)
-		w.l+=2
+		l := w.ensure(2)
+		w.buf[l] = 0x80 | uint8(i>>7)
+		w.buf[l+1] = uint8(i&0x7f)
 		return
 	case i < 1<<21:
-		w.ensure(3)
-		w.buf[w.l] = 0x80 | uint8(i>>14)
-		w.buf[w.l+1] = 0x80 | uint8((i>>7)&0x7f)
-		w.buf[w.l+2] = uint8(i&0x7f)
-		w.l+=3
+		l := w.ensure(3)
+		w.buf[l] = 0x80 | uint8(i>>14)
+		w.buf[l+1] = 0x80 | uint8((i>>7)&0x7f)
+		w.buf[l+2] = uint8(i&0x7f)
 		return
 	case i < 1<<28:
 		n = 4
@@ -180,9 +164,8 @@ func (w *Writer) Uint64var(i uint64) {
 	default:
 		n = 10
 	}
-	w.ensure(n)
-	w.l+=n
-	j := w.l-1
+	l := w.ensure(n)
+	j := l+n-1
 	w.buf[j] = uint8(i&0x7f)
 	for k := n-1; k!=0; k-- {
 		i >>= 7
@@ -196,97 +179,86 @@ func (w *Writer) Intvar(i int) {
 }
 
 func (w *Writer) Bytesl(i []byte) {
-	w.ensure(len(i))
-	copy(w.buf[w.l:], i)
-	w.l+=len(i)
+	l := w.ensure(len(i))
+	copy(w.buf[l:], i)
 	return
 }
 
 func (w *Writer) Uint8sl(i []uint8) {
-	w.ensure(len(i))
-	copy(w.buf[w.l:], i)
-	w.l+=len(i)
+	l := w.ensure(len(i))
+	copy(w.buf[l:], i)
 	return
 }
 
 func (w *Writer) Int8sl(i []int8) {
-	w.ensure(len(i))
+	l := w.ensure(len(i))
 	for j:=0; j<len(i); j++ {
-		w.buf[w.l+j] = uint8(i[j])
+		w.buf[l+j] = uint8(i[j])
 	}
-	w.l+=len(i)
 	return
 }
 
 func (w *Writer) Uint16sl(i []uint16) {
-	w.ensure(len(i)*2)
+	l := w.ensure(len(i)*2)
 	for j:=0; j<len(i); j++ {
-		le.PutUint16(w.buf[w.l+j*2:], i[j])
+		le.PutUint16(w.buf[l+j*2:], i[j])
 	}
-	w.l+=len(i)*2
 	return
 }
 
 func (w *Writer) Int16sl(i []int16) {
-	w.ensure(len(i)*2)
+	l := w.ensure(len(i)*2)
 	for j:=0; j<len(i); j++ {
-		le.PutUint16(w.buf[w.l+j*2:], uint16(i[j]))
+		le.PutUint16(w.buf[l+j*2:], uint16(i[j]))
 	}
-	w.l+=len(i)*2
 	return
 }
 
 func (w *Writer) Uint32sl(i []uint32) {
-	w.ensure(len(i)*4)
+	l := w.ensure(len(i)*4)
 	for j:=0; j<len(i); j++ {
-		le.PutUint32(w.buf[w.l+j*4:], i[j])
+		le.PutUint32(w.buf[l+j*4:], i[j])
 	}
-	w.l+=len(i)*4
 	return
 }
 
 func (w *Writer) Int32sl(i []int32) {
-	w.ensure(len(i)*4)
+	l := w.ensure(len(i)*4)
 	for j:=0; j<len(i); j++ {
-		le.PutUint32(w.buf[w.l+j*4:], uint32(i[j]))
+		le.PutUint32(w.buf[l+j*4:], uint32(i[j]))
 	}
-	w.l+=len(i)*4
 	return
 }
 
 func (w *Writer) Uint64sl(i []uint64) {
-	w.ensure(len(i)*8)
+	l := w.ensure(len(i)*8)
 	for j:=0; j<len(i); j++ {
-		le.PutUint64(w.buf[w.l+j*8:], i[j])
+		le.PutUint64(w.buf[l+j*8:], i[j])
 	}
-	w.l+=len(i)*8
 	return
 }
 
 func (w *Writer) Int64sl(i []int64) {
-	w.ensure(len(i)*8)
+	l := w.ensure(len(i)*8)
 	for j:=0; j<len(i); j++ {
-		le.PutUint64(w.buf[w.l+j*8:], uint64(i[j]))
+		le.PutUint64(w.buf[l+j*8:], uint64(i[j]))
 	}
-	w.l+=len(i)*8
 	return
 }
 
 func (w *Writer) Float32sl(i []float32) {
-	w.ensure(len(i)*4)
+	l := w.ensure(len(i)*4)
 	for j:=0; j<len(i); j++ {
-		le.PutUint32(w.buf[w.l+j*4:], math.Float32bits(i[j]))
+		le.PutUint32(w.buf[l+j*4:], math.Float32bits(i[j]))
 	}
-	w.l+=len(i)*4
 	return
 }
 
 func (w *Writer) Float64sl(i []float64) {
-	w.ensure(len(i)*8)
+	l := w.ensure(len(i)*8)
 	for j:=0; j<len(i); j++ {
-		le.PutUint64(w.buf[w.l+j*4:], math.Float64bits(i[j]))
+		le.PutUint64(w.buf[l+j*4:], math.Float64bits(i[j]))
 	}
-	w.l+=len(i)*8
 	return
 }
 
