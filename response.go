@@ -21,9 +21,9 @@ const (
 	RcProtocolError = RcFatal | (0x0300)
 )
 const (
-	RcTimeout = 0x0c00 | RcTemporary
 	RcCanceled = 0xff00 | RcTemporary
 	RcIOError = 0xfe00 | RcTemporary
+	RcTimeout = 0xfd00 | RcTemporary
 )
 
 type Response struct {

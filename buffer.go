@@ -8,12 +8,12 @@ import (
 
 var _ = log.Print
 
-type bufResponder struct {
+type bufMiddleware struct {
 	Middleware
 	state uint32
 }
 
-func (b *bufResponder) Respond(r *Response) {
+func (b *bufMiddleware) Respond(r *Response) {
 	b.state = bsFree
 }
 
@@ -29,7 +29,7 @@ const (
 
 type bufferRow struct {
 	id  uint64
-	row [bufRow]bufResponder
+	row [bufRow]bufMiddleware
 }
 
 type Buffer struct {
