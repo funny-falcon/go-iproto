@@ -178,7 +178,7 @@ func (w *Writer) Intvar(i int) {
 	w.Uint64var(uint64(i))
 }
 
-func (w *Writer) Bytesl(i []byte) {
+func (w *Writer) Bytes(i []byte) {
 	l := w.ensure(len(i))
 	copy(w.buf[l:], i)
 	return
@@ -726,4 +726,31 @@ func (r Reader) Reflect(v reflect.Value, impl Implements) (imp Implements, rest 
 		err = errors.New("iproto.Writer: wrong type "+v.Type().String())
 	}
 	return
+}
+
+func (r Reader) IWriter(self interface{}, w *Writer) error {
+	w.Bytes([]byte(r))
+	return nil
+}
+
+type iwriterWrap struct {
+	i interface{}
+}
+func (wrap iwriterWrap) IWrite(o interface{}, w *Writer) error {
+	return w.Write(wrap.i)
+}
+
+func Wrap2IWriter(i interface{}) (IWriter, error) {
+	return iwriterWrap{i}, nil
+}
+
+type ireaderWrap struct {
+	i interface{}
+}
+func (wrap ireaderWrap) IRead(o interface{}, r Reader) (rest Reader, err error) {
+	return r.Read(wrap.i)
+}
+
+func Wrap2IReader(i interface{}) (IReader, error) {
+	return ireaderWrap{i}, nil
 }

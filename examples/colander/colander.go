@@ -57,7 +57,7 @@ func (r *OpTestReq) IMsg() iproto.RequestType {
 }
 
 func (r *OpTestReq) IWrite(o interface{}, w *iproto.Writer) error {
-	w.Uint32(o.(*OpTestReq).J)
+	w.Uint32(r.J)
 	return nil
 }
 
@@ -92,8 +92,8 @@ func sumTestService(cx *iproto.Context) {
 		end := beg + (CHKNUM+j)/cap(sums)
 		cx.GoInt(func(cx *iproto.Context, ji interface{}) {
 			var s uint32
-			j := ji.([2]int)
-			from, to := uint32(j[0]), uint32(j[1])
+			jj := ji.([2]int)
+			from, to := uint32(jj[0]), uint32(jj[1])
 
 			mr := cx.NewMulti()
 			mr.TimeoutFrom(ProxyTestService)

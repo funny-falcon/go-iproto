@@ -51,7 +51,7 @@ func (w *MultiRequest) SetTimeout(timeout time.Duration) {
 	}
 }
 
-func (w *MultiRequest) Request(msg RequestType, body interface{}) *Request {
+func (w *MultiRequest) Request(msg RequestType, body IWriter) *Request {
 	if w.cx == nil {
 		w.cx = &Context{}
 	}
@@ -77,16 +77,21 @@ func (w *MultiRequest) Request(msg RequestType, body interface{}) *Request {
 	return req
 }
 
-func (w *MultiRequest) SendMsgBody(serv Service, msg RequestType, body interface{}) uint32 {
-	req := w.Request(msg, body)
+func (w *MultiRequest) SendMsgBody(serv Service, msg RequestType, body interface{}) *Request {
+	var wr IWriter
+	var ok bool
+	if wr, ok = body.(IWriter); !ok {
+		wr, _ = Wrap2IWriter(body)
+	}
+	req := w.Request(msg, wr)
 	serv.Send(req)
-	return req.Id
+	return req
 }
 
-func (w *MultiRequest) Send(serv Service, r RequestData) (res <-chan *Response) {
+func (w *MultiRequest) Send(serv Service, r RequestData) *Request {
 	req := w.Request(r.IMsg(), r)
 	serv.Send(req)
-	return res
+	return req
 }
 
 func (w *MultiRequest) Each() <-chan *Response {

@@ -156,13 +156,13 @@ func (c *Context) Respond(code RetCode, val interface{}) {
 	}
 }
 
-func (c *Context) request(id uint32, msg RequestType, val interface{}) (r *Request) {
+func (c *Context) request(id uint32, msg RequestType, val IWriter) (r *Request) {
 	if len(c.reqBuf) == 0 {
 		c.reqBuf = make([]Request, cxReqBuf)
 		c.resBuf = make([]Response, cxReqBuf)
 	}
 
-	c.writer.Write(val)
+	val.IWrite(val, &c.writer)
 	body := c.writer.Written()
 
 	r = &c.reqBuf[0]
@@ -176,7 +176,7 @@ func (c *Context) request(id uint32, msg RequestType, val interface{}) (r *Reque
 	return
 }
 
-func (c *Context) NewRequest(msg RequestType, body interface{}) (r *Request, res <-chan *Response) {
+func (c *Context) NewRequest(msg RequestType, body IWriter) (r *Request, res <-chan *Response) {
 	c.reqId++
 	r = c.request(c.reqId, msg, body)
 	ch := make(Chan, 1)
@@ -210,13 +210,24 @@ func (c *Context) NewMulti() (multi *MultiRequest) {
 
 func (c *Context) SendMsgBody(serv Service, msg RequestType, body interface{}) (res <-chan *Response) {
 	var req *Request
-	req, res = c.NewRequest(msg, body)
+	var wr IWriter
+	var ok bool
+	if wr, ok = body.(IWriter); !ok {
+		wr, _ = Wrap2IWriter(body)
+	}
+	req, res = c.NewRequest(msg, wr)
 	serv.Send(req)
 	return res
 }
 
 func (c *Context) CallMsgBody(serv Service, msg RequestType, body interface{}) *Response {
-	req, res := c.NewRequest(msg, body)
+	var req *Request
+	var wr IWriter
+	var ok bool
+	if wr, ok = body.(IWriter); !ok {
+		wr, _ = Wrap2IWriter(body)
+	}
+	req, res := c.NewRequest(msg, wr)
 	serv.Send(req)
 	return <-res
 }
