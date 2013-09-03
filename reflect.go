@@ -586,6 +586,10 @@ func (r Reader) Int64sl(b []int64) (Reader, error) {
 	return r[len(b)*8:], nil
 }
 
+func (r Reader) Rest() []byte {
+	return []byte(r)
+}
+
 func (r Reader) Read(i interface{}) (rest Reader, err error) {
 	switch o := i.(type) {
 	case *int8:
