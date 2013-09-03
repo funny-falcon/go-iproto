@@ -10,6 +10,7 @@ import (
 
 type Server struct {
 	Config
+	Running chan bool
 
 	listener net.Listener
 
@@ -27,6 +28,8 @@ func (cfg *Config) NewServer() (serv *Server) {
 		Config: *cfg,
 	}
 
+	serv.Running = make(chan bool)
+	serv.stop = make(chan bool, 1)
 	serv.connClosed = make(chan uint64)
 	serv.conns = make(map[uint64]*Connection)
 
@@ -55,6 +58,7 @@ func (serv *Server) Stop() {
 }
 
 func (serv *Server) controlLoop() {
+	defer close(serv.Running)
 	for {
 		select {
 		case id := <-serv.connClosed:
