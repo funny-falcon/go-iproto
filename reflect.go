@@ -268,6 +268,8 @@ func (w *Writer) Float64sl(i []float64) {
 
 func (w *Writer) Write(i interface{}) (err error) {
 	switch o := i.(type) {
+	case nil:
+		return
 	case uint8:
 		w.Uint8(o)
 	case int8:
