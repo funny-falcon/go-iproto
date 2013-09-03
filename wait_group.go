@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"sort"
 )
 
 var _ = log.Print
@@ -25,12 +26,32 @@ const (
 	mrBufSize = 16
 )
 
+type MultiResponse []*Response
+var _ sort.Interface = MultiResponse(nil)
+
+func (mr MultiResponse) Less(i, j int) bool {
+	return mr[i].Id < mr[j].Id
+}
+
+func (mr MultiResponse) Swap(i, j int) {
+	mr[i], mr[j] = mr[j], mr[i]
+}
+
+func (mr MultiResponse) Len() int {
+	return len(mr)
+}
+
+func (mr MultiResponse) Sort() MultiResponse {
+	sort.Sort(mr)
+	return mr
+}
+
 type MultiRequest struct {
 	cx        *Context
 	m         sync.Mutex
 	c, r      uint32
 	requests  []*Request
-	responses []*Response
+	responses MultiResponse
 	ch        chan *Response
 	w         sync.Cond
 	timer     Timer
@@ -110,7 +131,7 @@ func (w *MultiRequest) Each() <-chan *Response {
 	return w.ch
 }
 
-func (w *MultiRequest) Results() []*Response {
+func (w *MultiRequest) Results() MultiResponse {
 	if w.kind&mrFailed != 0 && w.c != w.r {
 		w.performFailAll()
 	}
