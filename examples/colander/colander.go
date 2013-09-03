@@ -174,10 +174,10 @@ func main() {
 	}
 
 	ProxyTestService = recurConf.NewServer()
+	iproto.Run(ProxyTestService)
 
 	self := serverConf.NewServer()
 	self.Run()
-	iproto.Run(ProxyTestService)
 
 	ch := make(chan os.Signal)
 	signal.Notify(ch, os.Interrupt, os.Kill)
