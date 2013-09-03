@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync"
 	"time"
+	"runtime"
 )
 
 var _ = log.Print
@@ -238,6 +239,7 @@ func (conn *Connection) writeLoop() {
 
 	var req *Request
 
+	cnt := 0
 Loop:
 	for {
 		var request *iproto.Request
@@ -289,6 +291,11 @@ Loop:
 
 		if err = w.WriteRequest(requestHeader); err != nil {
 			break
+		}
+
+		if cnt++; cnt == 8 {
+			cnt = 0
+			runtime.Gosched()
 		}
 	}
 }
