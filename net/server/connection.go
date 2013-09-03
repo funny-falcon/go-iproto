@@ -6,6 +6,7 @@ import (
 	"log"
 	"sync"
 )
+
 var _ = log.Print
 
 type notifyAction uint32
@@ -17,6 +18,7 @@ const (
 )
 
 type ConnState uint32
+
 const (
 	CsConnected = ConnState(1 << iota)
 	CsReadClosed
@@ -26,16 +28,16 @@ const (
 
 type Connection struct {
 	*Server
-	Id uint64
+	Id   uint64
 	conn nt.NetConn
 
-	buf []nt.Response
-	out chan nt.Response
+	buf        []nt.Response
+	out        chan nt.Response
 	bufRealCap int
 
 	state ConnState
 
-	inFly  map[uint32] *iproto.Request
+	inFly map[uint32]*iproto.Request
 	sync.Mutex
 
 	loopNotify chan notifyAction
@@ -43,14 +45,14 @@ type Connection struct {
 
 func NewConnection(serv *Server, connection nt.NetConn, id uint64) (conn *Connection) {
 	log.Print("New connection ", id, connection.RemoteAddr())
-	conn = &Connection {
+	conn = &Connection{
 		Server: serv,
-		Id: id,
-		conn: connection,
+		Id:     id,
+		conn:   connection,
 
 		out: make(chan nt.Response, 128),
 
-		inFly: make(map[uint32] *iproto.Request),
+		inFly: make(map[uint32]*iproto.Request),
 
 		state: CsConnected,
 
@@ -115,7 +117,7 @@ func (conn *Connection) controlLoop() {
 			conn.state &= CsClosed
 			conn.state |= CsReadClosed
 			log.Print("Read Closed ", conn.Id, conn.state, conn.conn.RemoteAddr())
-			if len(conn.inFly) + len(conn.buf) + len(conn.out) == 0 {
+			if len(conn.inFly)+len(conn.buf)+len(conn.out) == 0 {
 				close(conn.out)
 			}
 			conn.Unlock()
@@ -124,14 +126,14 @@ func (conn *Connection) controlLoop() {
 			conn.state |= CsWriteClosed
 			log.Print("Write Closed ", conn.Id, conn.state, conn.conn.RemoteAddr(), CsClosed)
 			conn.cancelInFly()
-			if conn.state & CsReadClosed == 0 {
+			if conn.state&CsReadClosed == 0 {
 				conn.conn.CloseRead()
 			}
 		case inFlyEmpty:
 			close(conn.out)
 		}
 
-		if conn.state & CsClosed == CsClosed {
+		if conn.state&CsClosed == CsClosed {
 			log.Print("Breaking control loop")
 			break
 		}
@@ -160,7 +162,7 @@ func (conn *Connection) readLoop() {
 
 		if req.Msg == iproto.Ping {
 			res := nt.Response{
-				Id: req.Id,
+				Id:  req.Id,
 				Msg: iproto.Ping,
 			}
 			conn.out <- res
@@ -177,9 +179,9 @@ func (conn *Connection) readLoop() {
 		}
 
 		*request = iproto.Request{
-			Id: req.Id,
-			Msg: req.Msg,
-			Body: req.Body,
+			Id:        req.Id,
+			Msg:       req.Msg,
+			Body:      req.Body,
 			Responder: conn,
 		}
 		//request.SetPending()
@@ -210,7 +212,7 @@ Loop:
 		if len(conn.buf) == 0 {
 			conn.bufRealCap = 16
 			conn.buf = make([]nt.Response, 0, 16)
-		} else if len(conn.buf) < conn.bufRealCap / 16 {
+		} else if len(conn.buf) < conn.bufRealCap/16 {
 			conn.bufRealCap = len(conn.buf) * 2
 			tmp := make([]nt.Response, len(conn.buf), conn.bufRealCap)
 			copy(tmp, conn.buf)
@@ -235,13 +237,12 @@ func (conn *Connection) writeLoop() {
 		conn.notifyLoop(writeClosed)
 	}()
 
-
 Loop:
 	for {
 		var res nt.Response
 		var ok bool
 
-		Select:
+	Select:
 		select {
 		case res, ok = <-conn.out:
 			if !ok {
@@ -254,7 +255,7 @@ Loop:
 					conn.Unlock()
 					goto Select
 				}
-			} else if conn.state & CsReadClosed != 0 && len(conn.inFly) == 0 && len(conn.out) == 0 {
+			} else if conn.state&CsReadClosed != 0 && len(conn.inFly) == 0 && len(conn.out) == 0 {
 				conn.Unlock()
 				conn.notifyLoop(inFlyEmpty)
 				break Loop

@@ -69,7 +69,8 @@ type SimplePoint struct {
 	stopped    bool
 	standalone bool
 	PointLoop
-	Timeout time.Duration
+	Timeout     time.Duration
+	TimeoutCode RetCode
 }
 
 var _ EndPoint = (*SimplePoint)(nil)

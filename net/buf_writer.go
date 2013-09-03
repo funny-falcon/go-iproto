@@ -5,24 +5,23 @@ import (
 	"time"
 )
 
-
 type BufWriter struct {
-	w io.Writer
-	buf []byte
-	wr int
-	timeout time.Duration
-	d SetDeadliner
+	w        io.Writer
+	buf      []byte
+	wr       int
+	timeout  time.Duration
+	d        SetDeadliner
 	dChecked bool
 }
 
 func (w *BufWriter) Write(body []byte) (err error) {
 	bl := len(body)
 	l := len(w.buf)
-	if w.wr + bl > l || (bl > l / 4 && w.wr > l / 4) {
+	if w.wr+bl > l || (bl > l/4 && w.wr > l/4) {
 		if err = w.Flush(); err != nil {
 			return err
 		}
-		if bl > len(w.buf) / 4 {
+		if bl > len(w.buf)/4 {
 			return w.write(body)
 		}
 	}
@@ -32,7 +31,7 @@ func (w *BufWriter) Write(body []byte) (err error) {
 }
 
 func (w *BufWriter) WriteUint32(i uint32) (err error) {
-	if w.wr + 4 > len(w.buf) {
+	if w.wr+4 > len(w.buf) {
 		if err = w.Flush(); err != nil {
 			return err
 		}
@@ -44,7 +43,7 @@ func (w *BufWriter) WriteUint32(i uint32) (err error) {
 }
 
 func (w *BufWriter) Write3Uint32(i, j, k uint32) (err error) {
-	if w.wr + 12 > len(w.buf) {
+	if w.wr+12 > len(w.buf) {
 		if err = w.Flush(); err != nil {
 			return err
 		}
@@ -54,12 +53,12 @@ func (w *BufWriter) Write3Uint32(i, j, k uint32) (err error) {
 	bin_le.PutUint32(w.buf[wr:wr+4], i)
 	bin_le.PutUint32(w.buf[wr+4:wr+8], j)
 	bin_le.PutUint32(w.buf[wr+8:wr+12], k)
-	w.wr = wr+12
+	w.wr = wr + 12
 	return
 }
 
 func (w *BufWriter) WriteByte(i byte) (err error) {
-	if w.wr + 4 > len(w.buf) {
+	if w.wr+4 > len(w.buf) {
 		if err = w.Flush(); err != nil {
 			return
 		}

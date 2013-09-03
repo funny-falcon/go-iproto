@@ -1,10 +1,10 @@
 package iproto
 
 import (
-	"sync"
-	"sync/atomic"
 	"log"
 	"runtime"
+	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -53,23 +53,23 @@ type Context struct {
 	// RetCode stores return code if case when original request were canceled or expired
 	*cxAsMid
 	RetCode
-	parent *Context
-	m sync.Mutex
-	child sync.Cond
-	cancels [2]Canceler
-	cancelsn int
-	cancelsm map[Canceler]struct{}
-	reqBuf []Request
-	resBuf []Response
-	reqId  uint32
+	parent    *Context
+	m         sync.Mutex
+	child     sync.Cond
+	cancels   [2]Canceler
+	cancelsn  int
+	cancelsm  map[Canceler]struct{}
+	reqBuf    []Request
+	resBuf    []Response
+	reqId     uint32
 	cancelBuf []contextMiddleware
-	writer Writer
+	writer    Writer
 }
 
 func (c *Context) RemoveCanceler(cn Canceler) {
 	c.m.Lock()
 	var i int
-	for i=0; i<len(c.cancels); i++ {
+	for i = 0; i < len(c.cancels); i++ {
 		if cn == c.cancels[i] {
 			c.cancels[i] = nil
 			c.cancelsn--
@@ -92,7 +92,7 @@ func (c *Context) AddCanceler(cn Canceler) {
 	ok = c.RetCode != RcCanceled && c.RetCode != RcTimeout
 	if ok {
 		var i int
-		for i=0; i<len(c.cancels); i++ {
+		for i = 0; i < len(c.cancels); i++ {
 			if c.cancels[i] == nil {
 				c.cancels[i] = cn
 				c.cancelsn++
@@ -100,7 +100,7 @@ func (c *Context) AddCanceler(cn Canceler) {
 			}
 		}
 		if i == len(c.cancels) {
-			if c.cancelsm == nil  {
+			if c.cancelsm == nil {
 				c.cancelsm = make(map[Canceler]struct{})
 			}
 			c.cancelsm[cn] = struct{}{}
@@ -116,7 +116,7 @@ func (c *Context) cancelAll() {
 	for len(c.cancelsm) > 0 || c.cancelsn > 0 {
 		c.m.Lock()
 		cancels := make([]Canceler, 0, len(c.cancels)+c.cancelsn)
-		for i:=0; i<len(c.cancels); i++ {
+		for i := 0; i < len(c.cancels); i++ {
 			if c.cancels[i] != nil {
 				cancels = append(cancels, c.cancels[i])
 			}

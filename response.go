@@ -10,20 +10,20 @@ type RetCode uint32
 // RcIOError - socket were disconnected before answere arrives
 // RcCanceled - ...
 const (
-	RcOK       = RetCode(0)
-        RcTemporary = RetCode(1)
-        RcFatal    = RetCode(2)
-        RcKindMask = RetCode(3)
+	RcOK        = RetCode(0)
+	RcTemporary = RetCode(1)
+	RcFatal     = RetCode(2)
+	RcKindMask  = RetCode(3)
 )
 
 const (
-	RcShutdown = RcFatal | (0xff00)
+	RcShutdown      = RcFatal | (0xff00)
 	RcProtocolError = RcFatal | (0x0300)
 )
 const (
 	RcCanceled = 0xff00 | RcTemporary
-	RcIOError = 0xfe00 | RcTemporary
-	RcTimeout = 0xfd00 | RcTemporary
+	RcIOError  = 0xfe00 | RcTemporary
+	RcTimeout  = 0xfd00 | RcTemporary
 )
 
 type Response struct {
@@ -34,11 +34,11 @@ type Response struct {
 }
 
 func (res *Response) Valid() bool {
-	return res.Code & RcKindMask == 0
+	return res.Code&RcKindMask == 0
 }
 
 func (res *Response) Restartable() bool {
-	return res.Code & RcKindMask == RcTemporary
+	return res.Code&RcKindMask == RcTemporary
 }
 
 type Responder interface {

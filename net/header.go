@@ -1,28 +1,28 @@
 package net
 
 import (
+	"encoding/binary"
 	"github.com/funny-falcon/go-iproto"
 	"io"
-	"encoding/binary"
 	"time"
 )
 
 var bin_le = binary.LittleEndian
 
 type Request struct {
-	Msg      iproto.RequestType
-	Body     []byte
-	Id       uint32
+	Msg  iproto.RequestType
+	Body []byte
+	Id   uint32
 }
 
 type Response iproto.Response
 
 type HeaderReader struct {
-	r  SliceReader
+	r SliceReader
 }
 
 func (h *HeaderReader) Init(conn io.Reader, timeout time.Duration) {
-	h.r = SliceReader{ r: conn, size: 16*1024, timeout: timeout }
+	h.r = SliceReader{r: conn, size: 16 * 1024, timeout: timeout}
 }
 
 func (h *HeaderReader) ReadRequest() (req Request, err error) {
@@ -95,11 +95,11 @@ func (h *HeaderReader) ReadResponse(retCodeLen int) (res Response, err error) {
 }
 
 type HeaderWriter struct {
-	w  BufWriter
+	w BufWriter
 }
 
 func (h *HeaderWriter) Init(w io.Writer, timeout time.Duration) {
-	h.w = BufWriter{ w: w, buf: make([]byte, 64*1024), timeout: timeout}
+	h.w = BufWriter{w: w, buf: make([]byte, 64*1024), timeout: timeout}
 }
 
 func (h *HeaderWriter) WriteRequest(req Request) (err error) {

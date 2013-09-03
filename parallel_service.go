@@ -9,7 +9,7 @@ import (
 var _ = log.Print
 
 type BF struct {
-	N int
+	N       int
 	Timeout time.Duration
 }
 

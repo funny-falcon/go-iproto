@@ -8,7 +8,7 @@ import (
 )
 
 type SConf struct {
-	Name string
+	Name        string
 	Connections int
 }
 
@@ -18,14 +18,15 @@ type conf struct {
 }
 
 type actionKind int
+
 const (
-	setServ = actionKind(iota+1)
+	setServ = actionKind(iota + 1)
 )
 
 type action struct {
-	kind       actionKind
-	servs      int
-	timeout    time.Duration
+	kind    actionKind
+	servs   int
+	timeout time.Duration
 }
 
 type Server struct {
@@ -40,9 +41,9 @@ type Server struct {
 	established int
 	dying       int
 
-	connErr     chan connection.Error
-	actions     chan action
-	exiting     bool
+	connErr chan connection.Error
+	actions chan action
+	exiting bool
 
 	reconnecter *time.Ticker
 }
@@ -58,8 +59,8 @@ func (cfg *ServerConfig) NewServer() (serv *Server) {
 		},
 		conf: conf{
 			SConf: SConf{
-				Name:           cfg.Name,
-				Connections:    cfg.Connections,
+				Name:        cfg.Name,
+				Connections: cfg.Connections,
 			},
 			CConf: connection.CConf{
 				Network:      cfg.Network,
@@ -70,8 +71,8 @@ func (cfg *ServerConfig) NewServer() (serv *Server) {
 				RetCodeLen:   cfg.RetCodeLen,
 			},
 		},
-		connErr: make(chan connection.Error, 4),
-		actions: make(chan action, 1),
+		connErr:     make(chan connection.Error, 4),
+		actions:     make(chan action, 1),
 		connections: make(map[uint64]*connection.Connection),
 	}
 
@@ -129,7 +130,7 @@ func (serv *Server) Loop() {
 			serv.fixConnections()
 		}
 
-		if serv.exiting && serv.established + serv.dialing == 0 {
+		if serv.exiting && serv.established+serv.dialing == 0 {
 			serv.reconnecter.Stop()
 			break
 		}
@@ -174,5 +175,5 @@ func (serv *Server) onConnError(connErr connection.Error) {
 }
 
 func (serv *Server) SetConnections(n int) {
-	serv.actions <- action{ kind: setServ, servs: n }
+	serv.actions <- action{kind: setServ, servs: n}
 }

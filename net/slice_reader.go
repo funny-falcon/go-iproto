@@ -6,11 +6,11 @@ import (
 )
 
 type SliceReader struct {
-	r io.Reader
-	size int
-	buf []byte
-	timeout time.Duration
-	d SetDeadliner
+	r        io.Reader
+	size     int
+	buf      []byte
+	timeout  time.Duration
+	d        SetDeadliner
 	dChecked bool
 }
 

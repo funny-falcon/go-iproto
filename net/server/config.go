@@ -15,5 +15,4 @@ type Config struct {
 	WriteTimeout time.Duration
 
 	RetCodeLen int
-
 }

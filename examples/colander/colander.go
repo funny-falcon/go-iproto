@@ -1,30 +1,31 @@
 package main
 
 import (
+	"encoding/binary"
 	"github.com/funny-falcon/go-iproto"
 	"github.com/funny-falcon/go-iproto/net/client"
 	"github.com/funny-falcon/go-iproto/net/server"
-	"encoding/binary"
 	"log"
 	"time"
 
 	"flag"
-	"runtime/pprof"
 	"os"
 	"os/signal"
+	"runtime/pprof"
 )
 
 var _ = log.Print
 
 const (
 	OP_SUMTEST, OP_TEST iproto.RequestType = 1, 2
-	RcError iproto.RetCode = 1
-	CHKNUM = 32
+	RcError             iproto.RetCode     = 1
+	CHKNUM                                 = 32
 )
 
 var le = binary.LittleEndian
 
 var RootService = iproto.Route(rootService)
+
 func rootService(r *iproto.Request) {
 	switch r.Msg {
 	case OP_TEST:
@@ -35,6 +36,7 @@ func rootService(r *iproto.Request) {
 }
 
 var OpTestService = iproto.SF(opTestService)
+
 func opTestService(r *iproto.Request) {
 	if len(r.Body) != 4 {
 		r.Respond(RcError, nil)
@@ -70,8 +72,8 @@ func (r *Res) IRead(o interface{}, read iproto.Reader) (rest iproto.Reader, err 
 	return
 }
 
+var SumTestService = iproto.BF{N: 512, Timeout: 100 * time.Millisecond}.New(sumTestService)
 
-var SumTestService = iproto.BF{N: 512, Timeout: 100*time.Millisecond}.New(sumTestService)
 func sumTestService(cx *iproto.Context) {
 	defer func() {
 		if m := recover(); m != nil {
@@ -83,7 +85,7 @@ func sumTestService(cx *iproto.Context) {
 	result := iproto.RcOK
 
 	in_count++
-	if in_count % 10000 == 0 {
+	if in_count%10000 == 0 {
 		log.Println("in count", in_count)
 	}
 
@@ -98,8 +100,8 @@ func sumTestService(cx *iproto.Context) {
 			mr.TimeoutFrom(ProxyTestService)
 
 			var req OpTestReq
-			for i:=from; i<to; i++ {
-				req.J = i*i
+			for i := from; i < to; i++ {
+				req.J = i * i
 				mr.Send(ProxyTestService, &req)
 			}
 
@@ -131,7 +133,7 @@ func sumTestService(cx *iproto.Context) {
 
 	if result == RcError {
 		bad_count++
-		if bad_count % 1000 == 0 {
+		if bad_count%1000 == 0 {
 			log.Println("bad count", bad_count)
 		}
 	}
@@ -141,20 +143,20 @@ func sumTestService(cx *iproto.Context) {
 
 var ProxyTestService iproto.EndPoint
 
-var serverConf = server.Config {
-	Network: "tcp",
-	Address: ":8766",
+var serverConf = server.Config{
+	Network:    "tcp",
+	Address:    ":8766",
 	RetCodeLen: 4,
-	EndPoint: &RootService,
+	EndPoint:   &RootService,
 }
 
-var recurConf = client.ServerConfig {
-	Network: "tcp",
-	Address: ":8765",
-	RetCodeLen: 4,
-	Connections: 4,
+var recurConf = client.ServerConfig{
+	Network:      "tcp",
+	Address:      ":8765",
+	RetCodeLen:   4,
+	Connections:  4,
 	PingInterval: time.Hour,
-	Timeout: 100*time.Millisecond,
+	Timeout:      100 * time.Millisecond,
 }
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")

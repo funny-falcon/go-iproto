@@ -1,33 +1,34 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"github.com/funny-falcon/go-iproto"
 	"github.com/funny-falcon/go-iproto/net/client"
-	"flag"
-	"time"
-	"fmt"
+	"log"
 	"math"
 	"runtime"
-	"log"
+	"time"
 )
+
 var _ = log.Print
 var _ = runtime.Gosched
 
 type Accum struct {
-	Count uint64
-	Bad uint64
+	Count         uint64
+	Bad           uint64
 	Min, Max, Sum uint64
-	Sum2 float64
+	Sum2          float64
 }
 
 func (a *Accum) Epoch(t time.Duration, good bool) {
-	a.Count ++
+	a.Count++
 	if !good {
 		a.Bad++
 	}
 	d := uint64(t)
 	a.Sum += d
-	a.Sum2 += float64(d)*float64(d)
+	a.Sum2 += float64(d) * float64(d)
 	if a.Min > d {
 		a.Min = d
 	}
@@ -53,7 +54,7 @@ func (a *Accum) String() string {
 	cnt := float64(a.Count)
 	return fmt.Sprintf("Count: %d Min: %f Max: %f Avg: %f  Stddef: %f Bad: %d", a.Count,
 		float64(a.Min)/1e6, float64(a.Max)/1e6, float64(a.Sum)/cnt/1e6,
-		math.Sqrt(a.Sum2/cnt - math.Pow(float64(a.Sum)/cnt, 2))/1e6,
+		math.Sqrt(a.Sum2/cnt-math.Pow(float64(a.Sum)/cnt, 2))/1e6,
 		a.Bad)
 }
 
@@ -81,13 +82,12 @@ func main() {
 
 	action := iproto.RequestType(actioni)
 
-
 	conf := client.ServerConfig{
-		Network: "tcp",
-		Address: fmt.Sprintf("%s:%d", h, p),
-		Connections: c,
-		RetCodeLen: 4,
-		PingInterval: 1*time.Second,
+		Network:      "tcp",
+		Address:      fmt.Sprintf("%s:%d", h, p),
+		Connections:  c,
+		RetCodeLen:   4,
+		PingInterval: 1 * time.Second,
 		//Timeout: time.Second,
 	}
 
@@ -112,14 +112,14 @@ func main() {
 	start := time.Now()
 
 	accums := make(chan *Accum, 1)
-	for j:=uint32(1); j<=uint32(g); j++ {
-		go func(j uint32){
+	for j := uint32(1); j <= uint32(g); j++ {
+		go func(j uint32) {
 			var cx iproto.Context
 			locaccum := Accum{Min: ^uint64(0)}
-			for i:=0; i<n; i+=batch {
+			for i := 0; i < n; i += batch {
 				epochs := make([]iproto.Epoch, batch)
 				mr := cx.NewMulti()
-				for j:=0; j < batch && i+j<n; j++ {
+				for j := 0; j < batch && i+j < n; j++ {
 					epochs[j] = iproto.NowEpoch()
 					mr.SendMsgBody(point, action, body)
 				}
@@ -135,9 +135,9 @@ func main() {
 	defer func() {
 		fmt.Println("Recv", &accum)
 		t := time.Now().Sub(start)
-		fmt.Printf("Stop %v rps: %f\n", t, float64(accum.Count) / (float64(t)/1.0e9))
+		fmt.Printf("Stop %v rps: %f\n", t, float64(accum.Count)/(float64(t)/1.0e9))
 	}()
-	for j:=uint32(1); j<=uint32(g); j++ {
+	for j := uint32(1); j <= uint32(g); j++ {
 		locaccum := <-accums
 		accum.Accum(locaccum)
 	}

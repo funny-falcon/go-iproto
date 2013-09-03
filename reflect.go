@@ -1,12 +1,12 @@
 package iproto
 
 import (
-	"reflect"
-	"math"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
+	"math"
+	"reflect"
 )
 
 var _ = log.Print
@@ -25,7 +25,7 @@ type IReader interface {
 }
 
 type Writer struct {
-	buf []byte
+	buf     []byte
 	defSize int
 }
 
@@ -42,18 +42,18 @@ func (w *Writer) Reset() {
 
 func ceilLog(n int) int {
 	if n > 0 {
-		n = (n-1) >> 2
+		n = (n - 1) >> 2
 	}
 	n |= n >> 1
 	n |= n >> 2
 	n |= n >> 4
 	n |= n >> 8
 	n |= n >> 16
-	return (n+1) << 2
+	return (n + 1) << 2
 }
 
 func (w *Writer) ensure(n int) (l int) {
-	if cap(w.buf) - len(w.buf) < n {
+	if cap(w.buf)-len(w.buf) < n {
 		newCap := len(w.buf) + n
 		if w.defSize == 0 {
 			w.defSize = wDefaultBuf
@@ -145,13 +145,13 @@ func (w *Writer) Uint64var(i uint64) {
 	case i < 1<<14:
 		l := w.ensure(2)
 		w.buf[l] = 0x80 | uint8(i>>7)
-		w.buf[l+1] = uint8(i&0x7f)
+		w.buf[l+1] = uint8(i & 0x7f)
 		return
 	case i < 1<<21:
 		l := w.ensure(3)
 		w.buf[l] = 0x80 | uint8(i>>14)
 		w.buf[l+1] = 0x80 | uint8((i>>7)&0x7f)
-		w.buf[l+2] = uint8(i&0x7f)
+		w.buf[l+2] = uint8(i & 0x7f)
 		return
 	case i < 1<<28:
 		n = 4
@@ -169,9 +169,9 @@ func (w *Writer) Uint64var(i uint64) {
 		n = 10
 	}
 	l := w.ensure(n)
-	j := l+n-1
-	w.buf[j] = uint8(i&0x7f)
-	for k := n-1; k!=0; k-- {
+	j := l + n - 1
+	w.buf[j] = uint8(i & 0x7f)
+	for k := n - 1; k != 0; k-- {
 		i >>= 7
 		j--
 		w.buf[j] = 0x80 | uint8(i&0x7f)
@@ -196,71 +196,71 @@ func (w *Writer) Uint8sl(i []uint8) {
 
 func (w *Writer) Int8sl(i []int8) {
 	l := w.ensure(len(i))
-	for j:=0; j<len(i); j++ {
+	for j := 0; j < len(i); j++ {
 		w.buf[l+j] = uint8(i[j])
 	}
 	return
 }
 
 func (w *Writer) Uint16sl(i []uint16) {
-	l := w.ensure(len(i)*2)
-	for j:=0; j<len(i); j++ {
+	l := w.ensure(len(i) * 2)
+	for j := 0; j < len(i); j++ {
 		le.PutUint16(w.buf[l+j*2:], i[j])
 	}
 	return
 }
 
 func (w *Writer) Int16sl(i []int16) {
-	l := w.ensure(len(i)*2)
-	for j:=0; j<len(i); j++ {
+	l := w.ensure(len(i) * 2)
+	for j := 0; j < len(i); j++ {
 		le.PutUint16(w.buf[l+j*2:], uint16(i[j]))
 	}
 	return
 }
 
 func (w *Writer) Uint32sl(i []uint32) {
-	l := w.ensure(len(i)*4)
-	for j:=0; j<len(i); j++ {
+	l := w.ensure(len(i) * 4)
+	for j := 0; j < len(i); j++ {
 		le.PutUint32(w.buf[l+j*4:], i[j])
 	}
 	return
 }
 
 func (w *Writer) Int32sl(i []int32) {
-	l := w.ensure(len(i)*4)
-	for j:=0; j<len(i); j++ {
+	l := w.ensure(len(i) * 4)
+	for j := 0; j < len(i); j++ {
 		le.PutUint32(w.buf[l+j*4:], uint32(i[j]))
 	}
 	return
 }
 
 func (w *Writer) Uint64sl(i []uint64) {
-	l := w.ensure(len(i)*8)
-	for j:=0; j<len(i); j++ {
+	l := w.ensure(len(i) * 8)
+	for j := 0; j < len(i); j++ {
 		le.PutUint64(w.buf[l+j*8:], i[j])
 	}
 	return
 }
 
 func (w *Writer) Int64sl(i []int64) {
-	l := w.ensure(len(i)*8)
-	for j:=0; j<len(i); j++ {
+	l := w.ensure(len(i) * 8)
+	for j := 0; j < len(i); j++ {
 		le.PutUint64(w.buf[l+j*8:], uint64(i[j]))
 	}
 	return
 }
 
 func (w *Writer) Float32sl(i []float32) {
-	l := w.ensure(len(i)*4)
-	for j:=0; j<len(i); j++ {
+	l := w.ensure(len(i) * 4)
+	for j := 0; j < len(i); j++ {
 		le.PutUint32(w.buf[l+j*4:], math.Float32bits(i[j]))
 	}
 	return
 }
 
 func (w *Writer) Float64sl(i []float64) {
-	l := w.ensure(len(i)*8)
-	for j:=0; j<len(i); j++ {
+	l := w.ensure(len(i) * 8)
+	for j := 0; j < len(i); j++ {
 		le.PutUint64(w.buf[l+j*4:], math.Float64bits(i[j]))
 	}
 	return
@@ -338,6 +338,7 @@ var _iread *IReader = new(IReader)
 var ireader = reflect.TypeOf(_iread).Elem()
 
 type Implements int
+
 const (
 	iUnknown = Implements(iota)
 	iImplements
@@ -372,13 +373,13 @@ func (w *Writer) Reflect(v reflect.Value, impl Implements) (imp Implements, err 
 		}
 		l := v.Len()
 		impl = iUnknown
-		for i:=0; i < l && err == nil; i++ {
+		for i := 0; i < l && err == nil; i++ {
 			impl, err = w.Reflect(v.Index(i), impl)
 		}
 
 	case reflect.Struct:
 		l := t.NumField()
-		for i:=0; i < l && err == nil; i++ {
+		for i := 0; i < l && err == nil; i++ {
 			_, err = w.Reflect(v.Field(i), iUnknown)
 		}
 
@@ -406,7 +407,7 @@ func (w *Writer) Reflect(v reflect.Value, impl Implements) (imp Implements, err 
 		w.Uint64(math.Float64bits(v.Float()))
 
 	default:
-		err = errors.New("iproto.Writer: wrong type "+v.Type().String())
+		err = errors.New("iproto.Writer: wrong type " + v.Type().String())
 	}
 	return
 }
@@ -519,7 +520,7 @@ func (r Reader) Int8sl(b []int8) (Reader, error) {
 	if len(r) < len(b) {
 		return nil, errors.New("iproto.Reader: not enough data for []uint8")
 	}
-	for i:=0; i<len(b); i++ {
+	for i := 0; i < len(b); i++ {
 		b[i] = int8(r[i])
 	}
 	return r[len(b):], nil
@@ -529,7 +530,7 @@ func (r Reader) Uint16sl(b []uint16) (Reader, error) {
 	if len(r) < len(b)*2 {
 		return nil, errors.New("iproto.Reader: not enough data for []uint16")
 	}
-	for i:=0; i<len(b); i++ {
+	for i := 0; i < len(b); i++ {
 		b[i] = le.Uint16(r[i*2:])
 	}
 	return r[len(b)*2:], nil
@@ -539,7 +540,7 @@ func (r Reader) Int16sl(b []int16) (Reader, error) {
 	if len(r) < len(b)*2 {
 		return nil, errors.New("iproto.Reader: not enough data for []int16")
 	}
-	for i:=0; i<len(b); i++ {
+	for i := 0; i < len(b); i++ {
 		b[i] = int16(le.Uint16(r[i*2:]))
 	}
 	return r[len(b)*2:], nil
@@ -549,7 +550,7 @@ func (r Reader) Uint32sl(b []uint32) (Reader, error) {
 	if len(r) < len(b)*4 {
 		return nil, errors.New("iproto.Reader: not enough data for []uint32")
 	}
-	for i:=0; i<len(b); i++ {
+	for i := 0; i < len(b); i++ {
 		b[i] = le.Uint32(r[i*4:])
 	}
 	return r[len(b)*4:], nil
@@ -559,7 +560,7 @@ func (r Reader) Int32sl(b []int32) (Reader, error) {
 	if len(r) < len(b)*4 {
 		return nil, errors.New("iproto.Reader: not enough data for []int32")
 	}
-	for i:=0; i<len(b); i++ {
+	for i := 0; i < len(b); i++ {
 		b[i] = int32(le.Uint32(r[i*4:]))
 	}
 	return r[len(b)*4:], nil
@@ -569,7 +570,7 @@ func (r Reader) Uint64sl(b []uint64) (Reader, error) {
 	if len(r) < len(b)*8 {
 		return nil, errors.New("iproto.Reader: not enough data for []uint64")
 	}
-	for i:=0; i<len(b); i++ {
+	for i := 0; i < len(b); i++ {
 		b[i] = le.Uint64(r[i*8:])
 	}
 	return r[len(b)*8:], nil
@@ -579,7 +580,7 @@ func (r Reader) Int64sl(b []int64) (Reader, error) {
 	if len(r) < len(b)*8 {
 		return nil, errors.New("iproto.Reader: not enough data for []int64")
 	}
-	for i:=0; i<len(b); i++ {
+	for i := 0; i < len(b); i++ {
 		b[i] = int64(le.Uint64(r[i*8:]))
 	}
 	return r[len(b)*8:], nil
@@ -727,7 +728,7 @@ func (r Reader) Reflect(v reflect.Value, impl Implements) (imp Implements, rest 
 			v.SetFloat(i)
 		}
 	default:
-		err = errors.New("iproto.Writer: wrong type "+v.Type().String())
+		err = errors.New("iproto.Writer: wrong type " + v.Type().String())
 	}
 	return
 }
@@ -738,6 +739,7 @@ func (r Reader) IWrite(self interface{}, w *Writer) error {
 }
 
 type Struct struct{}
+
 func (s Struct) IWrite(self interface{}, w *Writer) (err error) {
 	v := reflect.ValueOf(self)
 	_, err = w.Reflect(v, iNotImplements)
@@ -761,6 +763,7 @@ func (s Struct) IRead(self interface{}, r Reader) (rest Reader, err error) {
 type iwriterWrap struct {
 	i interface{}
 }
+
 func (wrap iwriterWrap) IWrite(o interface{}, w *Writer) error {
 	return w.Write(wrap.i)
 }
@@ -776,6 +779,7 @@ func Wrap2IWriter(i interface{}) (IWriter, error) {
 type ireaderWrap struct {
 	i interface{}
 }
+
 func (wrap ireaderWrap) IRead(o interface{}, r Reader) (rest Reader, err error) {
 	return r.Read(wrap.i)
 }

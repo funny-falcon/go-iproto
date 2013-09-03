@@ -2,9 +2,9 @@ package connection
 
 import (
 	"github.com/funny-falcon/go-iproto"
+	"log"
 	"sync"
 	"sync/atomic"
-	"log"
 )
 
 type Request struct {
@@ -13,9 +13,9 @@ type Request struct {
 }
 
 const (
-	rowLogN = 8
-	rowN = 1 << rowLogN
-	rowMask, rowN1 = rowN-1, rowN-1
+	rowLogN        = 8
+	rowN           = 1 << rowLogN
+	rowMask, rowN1 = rowN - 1, rowN - 1
 )
 
 type RequestRow struct {
@@ -26,13 +26,13 @@ type RequestRow struct {
 type reqMap map[uint32]*RequestRow
 type RequestHolder struct {
 	sync.Mutex
-	got uint64
-	put uint64
-	curId uint32
-	reqs reqMap
-	cur  *RequestRow
-	big  uint32
-	last *RequestRow
+	got     uint64
+	put     uint64
+	curId   uint32
+	reqs    reqMap
+	cur     *RequestRow
+	big     uint32
+	last    *RequestRow
 	lastBig uint32
 }
 
@@ -47,7 +47,7 @@ func (h *RequestHolder) getNext(conn *Connection) (req *Request) {
 	h.got++
 	for {
 		id := atomic.AddUint32(&h.curId, 1)
-		big := id>>rowLogN
+		big := id >> rowLogN
 		if h.big != big {
 			h.big = big
 			h.cur = &RequestRow{}
@@ -69,7 +69,7 @@ func (h *RequestHolder) getNext(conn *Connection) (req *Request) {
 
 func (h *RequestHolder) remove(fakeId uint32) (ireq *iproto.Request) {
 	var ok bool
-	big := fakeId>>rowLogN
+	big := fakeId >> rowLogN
 	if h.lastBig != big {
 		h.Lock()
 		if h.last, ok = h.reqs[big]; !ok {
@@ -99,7 +99,7 @@ func (h *RequestHolder) remove(fakeId uint32) (ireq *iproto.Request) {
 func (h *RequestHolder) getAll() (reqs []*Request) {
 	h.Lock()
 	defer h.Unlock()
-	reqs = make([]*Request, h.got - h.put)
+	reqs = make([]*Request, h.got-h.put)
 	i := 0
 	for _, row := range h.reqs {
 		for _, req := range row.reqs {

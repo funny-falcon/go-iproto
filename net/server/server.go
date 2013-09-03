@@ -1,11 +1,11 @@
 package server
 
 import (
-	"net"
 	"fmt"
-	"sync"
-	"log"
 	nt "github.com/funny-falcon/go-iproto/net"
+	"log"
+	"net"
+	"sync"
 )
 
 type Server struct {
@@ -13,12 +13,12 @@ type Server struct {
 
 	listener net.Listener
 
-	closing bool
-	stop chan bool
+	closing    bool
+	stop       chan bool
 	connClosed chan uint64
 
 	sync.Mutex
-	conns map[uint64] *Connection
+	conns     map[uint64]*Connection
 	currentId uint64
 }
 
@@ -28,11 +28,10 @@ func (cfg *Config) NewServer() (serv *Server) {
 	}
 
 	serv.connClosed = make(chan uint64)
-	serv.conns = make(map[uint64] *Connection)
+	serv.conns = make(map[uint64]*Connection)
 
 	return
 }
-
 
 func (serv *Server) Run() (err error) {
 	if !serv.EndPoint.Runned() {

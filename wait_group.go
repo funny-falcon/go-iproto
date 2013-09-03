@@ -177,7 +177,7 @@ func (w *MultiRequest) performFailAll() {
 	allReqs := w.requests
 	w.m.Unlock()
 
-	for i:=0; i<r; i++ {
+	for i := 0; i < r; i++ {
 		if allReqs[i] != nil {
 			w.performFail(allReqs[i])
 		}

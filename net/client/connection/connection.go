@@ -6,9 +6,10 @@ import (
 	"io"
 	"log"
 	"net"
-	"time"
 	"sync"
+	"time"
 )
+
 var _ = log.Print
 
 type notifyAction uint32
@@ -34,6 +35,7 @@ type Error struct {
 }
 
 type ConnState uint32
+
 const (
 	CsNew = 1 << iota
 	CsDialing
@@ -65,16 +67,17 @@ type Connection struct {
 
 	conn nt.NetConn
 
-	closeWrite   chan bool
-	readErr      error
+	closeWrite chan bool
+	readErr    error
 
-	inFly        RequestHolder
+	inFly RequestHolder
 
-	State        ConnState
-	shutdown     bool
+	State    ConnState
+	shutdown bool
 
 	loopNotify chan notifyAction
 }
+
 var _ iproto.EndPoint = (*Connection)(nil)
 
 func NewConnection(conf *CConf, id uint64) (conn *Connection) {
@@ -83,7 +86,7 @@ func NewConnection(conf *CConf, id uint64) (conn *Connection) {
 		Id:    id,
 
 		loopNotify: make(chan notifyAction, 2),
-		State: CsNew,
+		State:      CsNew,
 	}
 	conn.inFly.init()
 	conn.SimplePoint.Init(conn)
@@ -124,7 +127,7 @@ func (conn *Connection) RunWithConn(netconn io.ReadWriteCloser) {
 }
 
 func (conn *Connection) controlLoopExit() {
-	if conn.State & CsWriteClosed == 0 {
+	if conn.State&CsWriteClosed == 0 {
 		conn.Stop()
 	}
 	conn.ConnErr <- Error{conn, Read, conn.readErr}
@@ -144,18 +147,18 @@ func (conn *Connection) controlLoop() {
 		case readClosed:
 			conn.State &= CsClosed
 			conn.State |= CsReadClosed
-			if conn.State & CsWriteClosed == 0 {
+			if conn.State&CsWriteClosed == 0 {
 				conn.Stop()
 			}
 		case readEmpty:
 		}
 
-		if conn.State & CsWriteClosed != 0 {
+		if conn.State&CsWriteClosed != 0 {
 			if !closeReadCalled && conn.inFly.count() == 0 {
 				conn.conn.CloseRead()
 				closeReadCalled = true
 			}
-			if conn.State & CsReadClosed != 0 {
+			if conn.State&CsReadClosed != 0 {
 				break
 			}
 		}
@@ -200,7 +203,7 @@ func (conn *Connection) readLoop() {
 		if ireq := conn.inFly.remove(res.Id); ireq != nil {
 			ireq.Respond(res.Code, res.Body)
 		}
-		if conn.State & CsWriteClosed != 0 && conn.inFly.put >= conn.inFly.got {
+		if conn.State&CsWriteClosed != 0 && conn.inFly.put >= conn.inFly.got {
 			conn.notifyLoop(readEmpty)
 		}
 	}
@@ -277,8 +280,8 @@ Loop:
 				continue
 			}
 			requestHeader = nt.Request{
-				Msg: request.Msg,
-				Id: req.fakeId,
+				Msg:  request.Msg,
+				Id:   req.fakeId,
 				Body: request.Body,
 			}
 			req = nil
@@ -291,7 +294,7 @@ Loop:
 }
 
 func (conn *Connection) Closed() bool {
-	return conn.State & CsClosed != 0
+	return conn.State&CsClosed != 0
 }
 
 func (conn *Connection) LocalAddr() net.Addr {
