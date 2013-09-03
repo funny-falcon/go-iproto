@@ -2,10 +2,10 @@ package iproto
 
 import (
 	"log"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
-	"sort"
 )
 
 var _ = log.Print
@@ -27,6 +27,7 @@ const (
 )
 
 type MultiResponse []*Response
+
 var _ sort.Interface = MultiResponse(nil)
 
 func (mr MultiResponse) Less(i, j int) bool {
