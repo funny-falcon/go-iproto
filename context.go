@@ -232,11 +232,10 @@ func (c *Context) CallMsgBody(serv Service, msg RequestType, body interface{}) *
 	return <-res
 }
 
-func (c *Context) Send(serv Service, r RequestData) (res <-chan *Response) {
-	var req *Request
+func (c *Context) Send(serv Service, r RequestData) (req *Request, res <-chan *Response) {
 	req, res = c.NewRequest(r.IMsg(), r)
 	serv.Send(req)
-	return res
+	return req, res
 }
 
 func (c *Context) Call(serv Service, r RequestData) *Response {
