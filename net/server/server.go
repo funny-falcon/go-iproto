@@ -97,6 +97,7 @@ func (serv *Server) listenLoop() {
 			serv.Unlock()
 			continue
 		}
+		log.Printf("Accepted %s on %s", conn.RemoteAddr(), conn.LocalAddr())
 		serv.Lock()
 		if serv.closing {
 			serv.Unlock()
