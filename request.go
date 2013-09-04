@@ -108,6 +108,9 @@ func (r *Request) ResetToPending() bool {
 func (r *Request) chainResponse(code RetCode, body []byte) {
 	if r.Response == nil {
 		r.Response = &Response{Id: r.Id, Msg: r.Msg}
+	} else {
+		r.Response.Id = r.Id
+		r.Response.Msg = r.Msg
 	}
 	r.Response.Code = code
 	r.Response.Body = body
