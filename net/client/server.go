@@ -117,6 +117,7 @@ func (serv *Server) Name() string {
 func (serv *Server) Loop() {
 	serv.needConns = serv.Connections
 	serv.reconnecter = time.NewTicker(time.Second / 5)
+	serv.fixConnections()
 	for {
 		select {
 		case <-serv.ExitChan():
