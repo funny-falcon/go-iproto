@@ -190,6 +190,7 @@ func (c *Context) NewRequest(msg RequestType, body IWriter) (r *Request, res <-c
 			c.cancelBuf = make([]contextMiddleware, cxReqBuf)
 		}
 		m := &c.cancelBuf[0]
+		m.c = c
 		c.cancelBuf = c.cancelBuf[1:]
 		r.ChainMiddleware(m)
 		c.AddCanceler(m)
