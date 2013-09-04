@@ -645,6 +645,10 @@ func (r Reader) Read(i interface{}) (rest Reader, err error) {
 }
 
 func (r Reader) Reflect(v reflect.Value, impl Implements) (imp Implements, rest Reader, err error) {
+	if v.Type().Size() == 0 {
+		return iUnknown, r, nil
+	}
+
 	if impl == iUnknown && v.Type().Implements(ireader) || impl == iImplements {
 		imp = iImplements
 		v := v.Interface().(IReader)
@@ -675,7 +679,7 @@ func (r Reader) Reflect(v reflect.Value, impl Implements) (imp Implements, rest 
 	case reflect.Struct:
 		l := v.NumField()
 		rest = r
-		for i := 0; i < l; i++ {
+		for i := 0; i < l && err == nil; i++ {
 			if v := v.Field(i); v.CanSet() {
 				_, rest, err = rest.Reflect(v, iUnknown)
 			}
