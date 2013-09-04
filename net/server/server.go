@@ -52,9 +52,9 @@ func (serv *Server) Run() (err error) {
 func (serv *Server) Stop() {
 	serv.Lock()
 	serv.closing = true
+	serv.stop <- true
 	serv.Unlock()
 	serv.listener.Close()
-	serv.stop <- true
 }
 
 func (serv *Server) controlLoop() {
@@ -74,8 +74,11 @@ func (serv *Server) controlLoop() {
 			for _, conn := range serv.conns {
 				conn.Stop()
 			}
+			if len(serv.conns) == 0 {
+				serv.Unlock()
+				return
+			}
 			serv.Unlock()
-			serv.closing = true
 		}
 	}
 }
@@ -84,11 +87,12 @@ func (serv *Server) listenLoop() {
 	for {
 		conn, err := serv.listener.Accept()
 		if err != nil {
-			log.Printf("Accept on %s:%s failed with %v", serv.Network, serv.Address, err)
 			serv.Lock()
 			if serv.closing {
 				serv.Unlock()
 				break
+			} else {
+				log.Printf("Accept on %s:%s failed with %v", serv.Network, serv.Address, err)
 			}
 			serv.Unlock()
 			continue
