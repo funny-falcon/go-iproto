@@ -253,10 +253,21 @@ func (c *Context) Timeout() bool {
 	return c.RetCode == RcTimeout
 }
 
-func (c *Context) Go(f func(cx *Context)) {
-	child := &Context{parent: c}
-	c.AddCanceler(child)
+func (c *Context) Child() (child *Context) {
+	child = &Context{parent: c}
+	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
+	if rc == RcCanceled || rc == RcTimeout {
+		child.Cancel()
+	} else {
+		c.AddCanceler(child)
+	}
+	return
+}
+
+func (c *Context) Go(f func(cx *Context)) (child *Context) {
+	child = c.Child()
 	go child.go_(f)
+	return
 }
 
 func (child *Context) go_(f func(cx *Context)) {
@@ -264,10 +275,10 @@ func (child *Context) go_(f func(cx *Context)) {
 	f(child)
 }
 
-func (c *Context) GoInt(f func(*Context, interface{}), i interface{}) {
-	child := &Context{parent: c}
-	c.AddCanceler(child)
+func (c *Context) GoInt(f func(*Context, interface{}), i interface{}) (child *Context) {
+	child = c.Child()
 	go child.goInt(f, i)
+	return
 }
 
 func (child *Context) goInt(f func(*Context, interface{}), i interface{}) {
@@ -283,16 +294,16 @@ func (c *Context) WaitAll() {
 	c.m.Unlock()
 }
 
-func (c *Context) GoAsync(f func(cx *Context)) {
-	child := &Context{parent: c}
-	c.AddCanceler(child)
+func (c *Context) GoAsync(f func(cx *Context)) (child *Context) {
+	child = c.Child()
 	go f(child)
+	return
 }
 
-func (c *Context) GoIntAsync(f func(*Context, interface{}), i interface{}) {
-	child := &Context{parent: c}
-	c.AddCanceler(child)
+func (c *Context) GoIntAsync(f func(*Context, interface{}), i interface{}) (child *Context) {
+	child = c.Child()
 	go f(child, i)
+	return
 }
 
 func (child *Context) Done() {

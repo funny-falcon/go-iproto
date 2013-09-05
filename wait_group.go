@@ -178,18 +178,18 @@ func (w *MultiRequest) Respond(r *Response) {
 }
 
 func (w *MultiRequest) Cancel() {
+	w.setKind(mrCancel)
 	if w.c == w.r {
 		return
 	}
-	w.setKind(mrCancel)
 	w.performFailAll()
 }
 
 func (w *MultiRequest) Expire() {
+	w.setKind(mrExpire)
 	if w.c == w.r {
 		return
 	}
-	w.setKind(mrExpire)
 	w.performFailAll()
 }
 
