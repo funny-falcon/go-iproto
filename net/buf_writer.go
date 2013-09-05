@@ -76,9 +76,9 @@ func (w *BufWriter) Flush() (err error) {
 		}
 
 		w.wr = 0
-		if w.buf == nil {
-			w.buf = make([]byte, 4096)
-		}
+	}
+	if w.buf == nil {
+		w.buf = make([]byte, 4096)
 	}
 	return
 }

@@ -99,7 +99,7 @@ type HeaderWriter struct {
 }
 
 func (h *HeaderWriter) Init(w io.Writer, timeout time.Duration) {
-	h.w = BufWriter{w: w, buf: make([]byte, 64*1024), timeout: timeout}
+	h.w = BufWriter{w: w, timeout: timeout}
 }
 
 func (h *HeaderWriter) WriteRequest(req Request) (err error) {
