@@ -30,7 +30,7 @@ type Response struct {
 	Msg  RequestType
 	Id   uint32
 	Code RetCode
-	Body Reader
+	Body Body
 }
 
 func (res *Response) Valid() bool {

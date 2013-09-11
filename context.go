@@ -214,7 +214,7 @@ func (c *Context) SendMsgBody(serv Service, msg RequestType, body interface{}) (
 	var wr IWriter
 	var ok bool
 	if wr, ok = body.(IWriter); !ok {
-		wr, _ = Wrap2IWriter(body)
+		wr = Wrap2IWriter(body)
 	}
 	req, res = c.NewRequest(msg, wr)
 	serv.Send(req)
@@ -226,7 +226,7 @@ func (c *Context) CallMsgBody(serv Service, msg RequestType, body interface{}) *
 	var wr IWriter
 	var ok bool
 	if wr, ok = body.(IWriter); !ok {
-		wr, _ = Wrap2IWriter(body)
+		wr = Wrap2IWriter(body)
 	}
 	req, res := c.NewRequest(msg, wr)
 	serv.Send(req)

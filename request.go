@@ -27,7 +27,7 @@ type Request struct {
 	Msg       RequestType
 	Id        uint32
 	state     uint32
-	Body      Reader
+	Body      Body
 	Response  *Response
 	Responder Responder
 	chain     RequestMiddleware

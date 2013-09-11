@@ -18,10 +18,10 @@ const (
 var le = binary.LittleEndian
 
 type IWriter interface {
-	IWrite(self interface{}, w *Writer) error
+	IWrite(self interface{}, w *Writer)
 }
 type IReader interface {
-	IRead(self interface{}, r Reader) (rest Reader, err error)
+	IRead(self interface{}, r *Reader)
 }
 
 type Writer struct {
@@ -270,7 +270,7 @@ func (w *Writer) Float64sl(i []float64) {
 	return
 }
 
-func (w *Writer) Write(i interface{}) (err error) {
+func (w *Writer) Write(i interface{}) {
 	switch o := i.(type) {
 	case nil:
 		return
@@ -345,22 +345,19 @@ func (w *Writer) Write(i interface{}) (err error) {
 		w.IntUint32(len(o))
 		w.Float64sl(o)
 	case IWriter:
-		err = o.IWrite(o, w)
+		o.IWrite(o, w)
 	case []IWriter:
 		for _, v := range o {
-			err = v.IWrite(v, w)
+			v.IWrite(v, w)
 		}
 	default:
 		v := reflect.ValueOf(i)
-		_, err = w.Reflect(v, iNotImplements)
-	}
-	if err != nil {
-		w.Reset()
+		w.Reflect(v, iNotImplements)
 	}
 	return
 }
 
-func (w *Writer) NumSl(i interface{}) (err error) {
+func (w *Writer) NumSl(i interface{}) {
 	switch o := i.(type) {
 	case []uint8:
 		w.Uint8sl(o)
@@ -384,7 +381,7 @@ func (w *Writer) NumSl(i interface{}) (err error) {
 		w.Float64sl(o)
 	default:
 		v := reflect.ValueOf(o)
-		err = errors.New("iproto.NumSl: wrong type " + v.Type().String())
+		log.Panicf("iproto.NumSl: wrong type " + v.Type().String())
 	}
 	return
 }
@@ -402,11 +399,11 @@ const (
 	iNotImplements
 )
 
-func (w *Writer) Reflect(v reflect.Value, impl Implements) (imp Implements, err error) {
+func (w *Writer) Reflect(v reflect.Value, impl Implements) (imp Implements) {
 	if impl == iUnknown && v.Type().Implements(iwriter) || impl == iImplements {
 		imp = iImplements
 		o := v.Interface().(IWriter)
-		err = o.IWrite(o, w)
+		o.IWrite(o, w)
 		return
 	}
 
@@ -429,18 +426,18 @@ func (w *Writer) Reflect(v reflect.Value, impl Implements) (imp Implements, err 
 		switch et.Kind() {
 		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 			reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			err = w.NumSl(v.Interface())
+			w.NumSl(v.Interface())
 			return
 		}
 		impl = iUnknown
-		for i := 0; i < l && err == nil; i++ {
-			impl, err = w.Reflect(v.Index(i), impl)
+		for i := 0; i < l; i++ {
+			impl = w.Reflect(v.Index(i), impl)
 		}
 
 	case reflect.Struct:
 		l := t.NumField()
-		for i := 0; i < l && err == nil; i++ {
-			_, err = w.Reflect(v.Field(i), iUnknown)
+		for i := 0; i < l; i++ {
+			w.Reflect(v.Field(i), iUnknown)
 		}
 
 	case reflect.Int8:
@@ -467,323 +464,459 @@ func (w *Writer) Reflect(v reflect.Value, impl Implements) (imp Implements, err 
 		w.Uint64(math.Float64bits(v.Float()))
 
 	default:
-		err = errors.New("iproto.Writer: wrong type " + v.Type().String())
+		log.Panicf("iproto.Wirter.Reflect: wrong type " + v.Type().String())
 	}
 	return
 }
 
-type Reader []byte
-
-func (r Reader) Uint8() (uint8, Reader, error) {
-	if len(r) < 1 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for uint8")
-	}
-	return r[0], r[1:], nil
+type Body []byte
+func (b Body) IWrite(self interface{}, w *Writer) {
+	w.Bytes([]byte(b))
 }
 
-func (r Reader) Int8() (int8, Reader, error) {
-	if len(r) < 1 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for int8")
-	}
-	return int8(r[0]), r[1:], nil
+func (b Body) Reader() Reader {
+	return Reader{Rest: b}
 }
 
-func (r Reader) Uint16() (uint16, Reader, error) {
-	if len(r) < 2 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for uint16")
-	}
-	return le.Uint16(r), r[2:], nil
+func (b Body) Read(i interface{}) Reader {
+	r := b.Reader()
+	r.Read(i)
+	return r
 }
 
-func (r Reader) Int16() (int16, Reader, error) {
-	if len(r) < 2 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for int16")
-	}
-	return int16(le.Uint16(r)), r[2:], nil
+type Reader struct {
+	Rest []byte
+	Err  error
 }
 
-func (r Reader) Uint32() (uint32, Reader, error) {
-	if len(r) < 4 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for uint32")
+func (r *Reader) Uint8() (res uint8) {
+	if r.Err != nil {
+		return
 	}
-	return le.Uint32(r), r[4:], nil
+	if len(r.Rest) < 1 {
+		r.Err = errors.New("iproto.Reader: not enough data for uint8")
+		return
+	}
+	res = r.Rest[0]
+	r.Rest = r.Rest[1:]
+	return
 }
 
-func (r Reader) Int32() (int32, Reader, error) {
-	if len(r) < 4 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for int32")
+func (r *Reader) Int8() (res int8) {
+	if r.Err != nil {
+		return
 	}
-	return int32(le.Uint32(r)), r[4:], nil
+	if len(r.Rest) < 1 {
+		r.Err = errors.New("iproto.Reader: not enough data for int8")
+		return
+	}
+	res = int8(r.Rest[0])
+	r.Rest = r.Rest[1:]
+	return
 }
 
-func (r Reader) Uint64() (uint64, Reader, error) {
-	if len(r) < 8 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for uint64")
+func (r *Reader) Uint16() (res uint16) {
+	if r.Err != nil {
+		return
 	}
-	return le.Uint64(r), r[8:], nil
+	if len(r.Rest) < 2 {
+		r.Err = errors.New("iproto.Reader: not enough data for uint16")
+		return
+	}
+	res = le.Uint16(r.Rest)
+	r.Rest = r.Rest[2:]
+	return
 }
 
-func (r Reader) Int64() (int64, Reader, error) {
-	if len(r) < 8 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for int64")
+func (r *Reader) Int16() (res int16) {
+	if r.Err != nil {
+		return
 	}
-	return int64(le.Uint64(r)), r[8:], nil
+	if len(r.Rest) < 2 {
+		r.Err = errors.New("iproto.Reader: not enough data for int16")
+		return
+	}
+	res = int16(le.Uint16(r.Rest))
+	r.Rest = r.Rest[2:]
+	return
 }
 
-func (r Reader) Float32() (float32, Reader, error) {
-	if len(r) < 4 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for float32")
+func (r *Reader) Uint32() (res uint32) {
+	if r.Err != nil {
+		return
 	}
-	return math.Float32frombits(le.Uint32(r)), r[4:], nil
+	if len(r.Rest) < 4 {
+		r.Err = errors.New("iproto.Reader: not enough data for uint32")
+		return
+	}
+	res = le.Uint32(r.Rest)
+	r.Rest = r.Rest[4:]
+	return
 }
 
-func (r Reader) Float64() (float64, Reader, error) {
-	if len(r) < 8 {
-		return 0, nil, errors.New("iproto.Reader: not enough data for float64")
+func (r *Reader) Int32() (res int32) {
+	if r.Err != nil {
+		return
 	}
-	return math.Float64frombits(le.Uint64(r)), r[8:], nil
+	if len(r.Rest) < 4 {
+		r.Err = errors.New("iproto.Reader: not enough data for int32")
+		return
+	}
+	res = int32(le.Uint32(r.Rest))
+	r.Rest = r.Rest[4:]
+	return
 }
 
-func (r Reader) Uint64var() (uint64, Reader, error) {
-	i, n := binary.Uvarint(r)
+func (r *Reader) Uint64() (res uint64) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < 8 {
+		r.Err = errors.New("iproto.Reader: not enough data for uint64")
+		return
+	}
+	res = le.Uint64(r.Rest)
+	r.Rest = r.Rest[8:]
+	return
+}
+
+func (r *Reader) Int64() (res int64) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < 8 {
+		r.Err = errors.New("iproto.Reader: not enough data for int64")
+		return
+	}
+	res = int64(le.Uint64(r.Rest))
+	r.Rest = r.Rest[8:]
+	return
+}
+
+func (r *Reader) Float32() (res float32) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < 4 {
+		r.Err = errors.New("iproto.Reader: not enough data for float32")
+		return
+	}
+	res = math.Float32frombits(le.Uint32(r.Rest))
+	r.Rest = r.Rest[4:]
+	return
+}
+
+func (r *Reader) Float64() (res float64) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < 8 {
+		r.Err = errors.New("iproto.Reader: not enough data for float64")
+		return
+	}
+	res = math.Float64frombits(le.Uint64(r.Rest))
+	r.Rest = r.Rest[8:]
+	return
+}
+
+func (r *Reader) Uint64var() (res uint64) {
+	if r.Err != nil {
+		return
+	}
+	i, n := binary.Uvarint(r.Rest)
 	if n > 0 {
-		return i, r[n:], nil
+		res = i
+		r.Rest = r.Rest[n:]
+		return
 	} else if n == 0 {
-		return 0, nil, fmt.Errorf("iproto.Reader: not enough data for uint64var %x", r)
+		r.Err = fmt.Errorf("iproto.Reader: not enough data for uint64var %x", r)
+		return
 	} else {
-		return 0, nil, fmt.Errorf("iproto.Reader: varint is too big %x", r)
+		r.Err = fmt.Errorf("iproto.Reader: varint is too big %x", r)
+		return
 	}
 }
 
-func (r Reader) Intvar() (int, Reader, error) {
-	i, rest, err := r.Uint64var()
-	return int(i), rest, err
+func (r *Reader) Intvar() (res int) {
+	i := r.Uint64var()
+	return int(i)
 }
 
-func (r Reader) Uint8sl(b []uint8) (Reader, error) {
-	if len(r) < len(b) {
-		return nil, errors.New("iproto.Reader: not enough data for []uint8")
+func (r *Reader) Uint8sl(b []uint8) {
+	if r.Err != nil {
+		return
 	}
-	copy(b, r)
-	return r[len(b):], nil
-}
-
-func (r Reader) Bytes(b []byte) (Reader, error) {
-	if len(r) < len(b) {
-		return nil, errors.New("iproto.Reader: not enough data for []byte")
+	if len(r.Rest) < len(b) {
+		r.Err = errors.New("iproto.Reader: not enough data for []uint8")
+		return
 	}
-	copy(b, r)
-	return r[len(b):], nil
+	copy(b, r.Rest)
+	r.Rest = r.Rest[len(b):]
+	return
 }
 
-func (r Reader) Int8sl(b []int8) (Reader, error) {
-	if len(r) < len(b) {
-		return nil, errors.New("iproto.Reader: not enough data for []uint8")
+func (r *Reader) Bytes(b []byte) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b) {
+		r.Err = errors.New("iproto.Reader: not enough data for []byte")
+		return
+	}
+	copy(b, r.Rest)
+	r.Rest = r.Rest[len(b):]
+	return
+}
+
+func (r *Reader) Int8sl(b []int8) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b) {
+		r.Err = errors.New("iproto.Reader: not enough data for []uint8")
+		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = int8(r[i])
+		b[i] = int8(r.Rest[i])
 	}
-	return r[len(b):], nil
+	r.Rest = r.Rest[len(b):]
+	return
 }
 
-func (r Reader) Uint16sl(b []uint16) (Reader, error) {
-	if len(r) < len(b)*2 {
-		return nil, errors.New("iproto.Reader: not enough data for []uint16")
+func (r *Reader) Uint16sl(b []uint16) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b)*2 {
+		r.Err = errors.New("iproto.Reader: not enough data for []uint16")
+		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = le.Uint16(r[i*2:])
+		b[i] = le.Uint16(r.Rest[i*2:])
 	}
-	return r[len(b)*2:], nil
+	r.Rest = r.Rest[len(b)*2:]
+	return
 }
 
-func (r Reader) Int16sl(b []int16) (Reader, error) {
-	if len(r) < len(b)*2 {
-		return nil, errors.New("iproto.Reader: not enough data for []int16")
+func (r *Reader) Int16sl(b []int16) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b)*2 {
+		r.Err = errors.New("iproto.Reader: not enough data for []int16")
+		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = int16(le.Uint16(r[i*2:]))
+		b[i] = int16(le.Uint16(r.Rest[i*2:]))
 	}
-	return r[len(b)*2:], nil
+	r.Rest = r.Rest[len(b)*2:]
+	return
 }
 
-func (r Reader) Uint32sl(b []uint32) (Reader, error) {
-	if len(r) < len(b)*4 {
-		return nil, errors.New("iproto.Reader: not enough data for []uint32")
+func (r *Reader) Uint32sl(b []uint32) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b)*4 {
+		r.Err = errors.New("iproto.Reader: not enough data for []uint32")
+		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = le.Uint32(r[i*4:])
+		b[i] = le.Uint32(r.Rest[i*4:])
 	}
-	return r[len(b)*4:], nil
+	r.Rest = r.Rest[len(b)*4:]
+	return
 }
 
-func (r Reader) Int32sl(b []int32) (Reader, error) {
-	if len(r) < len(b)*4 {
-		return nil, errors.New("iproto.Reader: not enough data for []int32")
+func (r *Reader) Int32sl(b []int32) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b)*4 {
+		r.Err = errors.New("iproto.Reader: not enough data for []int32")
+		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = int32(le.Uint32(r[i*4:]))
+		b[i] = int32(le.Uint32(r.Rest[i*4:]))
 	}
-	return r[len(b)*4:], nil
+	r.Rest = r.Rest[len(b)*4:]
+	return
 }
 
-func (r Reader) Uint64sl(b []uint64) (Reader, error) {
-	if len(r) < len(b)*8 {
-		return nil, errors.New("iproto.Reader: not enough data for []uint64")
+func (r *Reader) Uint64sl(b []uint64) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b)*8 {
+		r.Err = errors.New("iproto.Reader: not enough data for []uint64")
+		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = le.Uint64(r[i*8:])
+		b[i] = le.Uint64(r.Rest[i*8:])
 	}
-	return r[len(b)*8:], nil
+	r.Rest = r.Rest[len(b)*8:]
+	return
 }
 
-func (r Reader) Int64sl(b []int64) (Reader, error) {
-	if len(r) < len(b)*8 {
-		return nil, errors.New("iproto.Reader: not enough data for []int64")
+func (r *Reader) Int64sl(b []int64) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b)*8 {
+		r.Err = errors.New("iproto.Reader: not enough data for []int64")
+		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = int64(le.Uint64(r[i*8:]))
+		b[i] = int64(le.Uint64(r.Rest[i*8:]))
 	}
-	return r[len(b)*8:], nil
+	r.Rest = r.Rest[len(b)*8:]
+	return
 }
 
-func (r Reader) Float32sl(b []float32) (Reader, error) {
-	if len(r) < len(b)*4 {
-		return nil, errors.New("iproto.Reader: not enough data for []float32")
+func (r *Reader) Float32sl(b []float32) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b)*4 {
+		r.Err = errors.New("iproto.Reader: not enough data for []float32")
+		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = math.Float32frombits(le.Uint32(r[i*4:]))
+		b[i] = math.Float32frombits(le.Uint32(r.Rest[i*4:]))
 	}
-	return r[len(b)*4:], nil
+	r.Rest = r.Rest[len(b)*4:]
+	return
 }
 
-func (r Reader) Float64sl(b []float64) (Reader, error) {
-	if len(r) < len(b)*8 {
-		return nil, errors.New("iproto.Reader: not enough data for []float64")
+func (r *Reader) Float64sl(b []float64) {
+	if r.Err != nil {
+		return
+	}
+	if len(r.Rest) < len(b)*8 {
+		r.Err = errors.New("iproto.Reader: not enough data for []float64")
+		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = math.Float64frombits(le.Uint64(r[i*8:]))
+		b[i] = math.Float64frombits(le.Uint64(r.Rest[i*8:]))
 	}
-	return r[len(b)*8:], nil
+	r.Rest = r.Rest[len(b)*8:]
+	return
 }
 
-func (r Reader) Rest() []byte {
-	return []byte(r)
-}
-
-func (r Reader) Read(i interface{}) (rest Reader, err error) {
+func (r *Reader) Read(i interface{}) {
 	switch o := i.(type) {
 	case *int8:
-		*o, rest, err = r.Int8()
+		*o = r.Int8()
 	case *uint8:
-		*o, rest, err = r.Uint8()
+		*o = r.Uint8()
 	case *int16:
-		*o, rest, err = r.Int16()
+		*o = r.Int16()
 	case *uint16:
-		*o, rest, err = r.Uint16()
+		*o = r.Uint16()
 	case *int32:
-		*o, rest, err = r.Int32()
+		*o = r.Int32()
 	case *uint32:
-		*o, rest, err = r.Uint32()
+		*o = r.Uint32()
 	case *int64:
-		*o, rest, err = r.Int64()
+		*o = r.Int64()
 	case *uint64:
-		*o, rest, err = r.Uint64()
+		*o = r.Uint64()
 	case *float32:
-		*o, rest, err = r.Float32()
+		*o = r.Float32()
 	case *float64:
-		*o, rest, err = r.Float64()
+		*o = r.Float64()
 	case []int8:
-		rest, err = r.Int8sl(o)
+		r.Int8sl(o)
 	case []uint8:
-		rest, err = r.Uint8sl(o)
+		r.Uint8sl(o)
 	case []int16:
-		rest, err = r.Int16sl(o)
+		r.Int16sl(o)
 	case []uint16:
-		rest, err = r.Uint16sl(o)
+		r.Uint16sl(o)
 	case []int32:
-		rest, err = r.Int32sl(o)
+		r.Int32sl(o)
 	case []uint32:
-		rest, err = r.Uint32sl(o)
+		r.Uint32sl(o)
 	case []int64:
-		rest, err = r.Int64sl(o)
+		r.Int64sl(o)
 	case []uint64:
-		rest, err = r.Uint64sl(o)
+		r.Uint64sl(o)
 	case []float32:
-		rest, err = r.Float32sl(o)
+		r.Float32sl(o)
 	case []float64:
-		rest, err = r.Float64sl(o)
+		r.Float64sl(o)
 	case *[]int8:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]int8, count)
-		rest, err = r.Int8sl(*o)
+		r.Int8sl(*o)
 	case *[]uint8:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]uint8, count)
-		rest, err = r.Uint8sl(*o)
+		r.Uint8sl(*o)
 	case *[]int16:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]int16, count)
-		rest, err = r.Int16sl(*o)
+		r.Int16sl(*o)
 	case *[]uint16:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]uint16, count)
-		rest, err = r.Uint16sl(*o)
+		r.Uint16sl(*o)
 	case *[]int32:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]int32, count)
-		rest, err = r.Int32sl(*o)
+		r.Int32sl(*o)
 	case *[]uint32:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]uint32, count)
-		rest, err = r.Uint32sl(*o)
+		r.Uint32sl(*o)
 	case *[]int64:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]int64, count)
-		rest, err = r.Int64sl(*o)
+		r.Int64sl(*o)
 	case *[]uint64:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]uint64, count)
-		rest, err = r.Uint64sl(*o)
+		r.Uint64sl(*o)
 	case *[]float32:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]float32, count)
-		rest, err = r.Float32sl(*o)
+		r.Float32sl(*o)
 	case *[]float64:
 		var count uint32
-		if count, rest, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		*o = make([]float64, count)
-		rest, err = r.Float64sl(*o)
+		r.Float64sl(*o)
 	case IReader:
-		rest, err = o.IRead(o, r)
+		o.IRead(o, r)
 	default:
 		// Fallback to reflect-based decoding.
 		var v reflect.Value
@@ -793,31 +926,32 @@ func (r Reader) Read(i interface{}) (rest Reader, err error) {
 		case reflect.Slice:
 			v = d
 		default:
-			return nil, errors.New("iproto.Reader: invalid type " + d.Type().String())
+			log.Panicf("iproto.Reader.Read: wrong type " + v.Type().String())
+			return
 		}
-		_, rest, err = r.Reflect(v, iNotImplements)
+		r.Reflect(v, iNotImplements)
 	}
 	return
 }
 
-func (r Reader) Reflect(v reflect.Value, impl Implements) (imp Implements, rest Reader, err error) {
+func (r *Reader) Reflect(v reflect.Value, impl Implements) (imp Implements) {
 	if v.Type().Size() == 0 {
-		return iUnknown, r, nil
+		return iNotImplements
 	}
 
 	if impl == iUnknown && v.Type().Implements(ireader) || impl == iImplements {
 		imp = iImplements
 		v := v.Interface().(IReader)
-		rest, err = v.IRead(v, r)
+		v.IRead(v, r)
 		return
 	}
 
 	switch v.Kind() {
 	case reflect.Ptr:
-		_, rest, err = r.Reflect(v.Elem(), impl)
+		r.Reflect(v.Elem(), impl)
 	case reflect.Slice:
 		var count uint32
-		if count, r, err = r.Uint32(); err != nil {
+		if count = r.Uint32(); r.Err != nil {
 			return
 		}
 		s := reflect.MakeSlice(v.Type(), int(count), int(count))
@@ -831,126 +965,83 @@ func (r Reader) Reflect(v reflect.Value, impl Implements) (imp Implements, rest 
 		switch et := v.Type().Elem(); et.Kind() {
 		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
 			reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
-			rest, err = r.Read(v.Interface())
+			r.Read(v.Interface())
 			return
 		}
 
 		l := v.Len()
-		rest = r
 		impl = iUnknown
-		for i := 0; i < l && err == nil; i++ {
+		for i := 0; i < l && r.Err == nil; i++ {
 			el := v.Index(i)
-			impl, rest, err = rest.Reflect(el.Addr(), impl)
+			impl = r.Reflect(el.Addr(), impl)
 		}
 
 	case reflect.Struct:
 		l := v.NumField()
-		rest = r
-		for i := 0; i < l && err == nil; i++ {
+		for i := 0; i < l && r.Err == nil; i++ {
 			if el := v.Field(i); /*el.CanSet()*/ true {
-				_, rest, err = rest.Reflect(el, iUnknown)
+				r.Reflect(el, iUnknown)
 			}
 		}
 
 	case reflect.Int8:
-		var i int8
-		if i, rest, err = r.Int8(); err == nil {
-			v.SetInt(int64(i))
-		}
+		v.SetInt(int64(r.Int8()))
 	case reflect.Int16:
-		var i int16
-		if i, rest, err = r.Int16(); err == nil {
-			v.SetInt(int64(i))
-		}
+		v.SetInt(int64(r.Int16()))
 	case reflect.Int32:
-		var i int32
-		if i, rest, err = r.Int32(); err == nil {
-			v.SetInt(int64(i))
-		}
+		v.SetInt(int64(r.Int32()))
 	case reflect.Int64:
-		var i int64
-		if i, rest, err = r.Int64(); err == nil {
-			v.SetInt(int64(i))
-		}
-
+		v.SetInt(r.Int64())
 	case reflect.Uint8:
-		var i uint8
-		if i, rest, err = r.Uint8(); err == nil {
-			v.SetUint(uint64(i))
-		}
+		v.SetUint(uint64(r.Uint8()))
 	case reflect.Uint16:
-		var i uint16
-		if i, rest, err = r.Uint16(); err == nil {
-			v.SetUint(uint64(i))
-		}
+		v.SetUint(uint64(r.Uint16()))
 	case reflect.Uint32:
-		var i uint32
-		if i, rest, err = r.Uint32(); err == nil {
-			v.SetUint(uint64(i))
-		}
+		v.SetUint(uint64(r.Uint32()))
 	case reflect.Uint64:
-		var i uint64
-		if i, rest, err = r.Uint64(); err == nil {
-			v.SetUint(uint64(i))
-		}
-
+		v.SetUint(r.Uint64())
 	case reflect.Float32:
-		var i float32
-		if i, rest, err = r.Float32(); err == nil {
-			v.SetFloat(float64(i))
-		}
+		v.SetFloat(float64(r.Float32()))
 	case reflect.Float64:
-		var i float64
-		if i, rest, err = r.Float64(); err == nil {
-			v.SetFloat(i)
-		}
+		v.SetFloat(r.Float64())
 	default:
-		err = errors.New("iproto.Writer: wrong type " + v.Type().String())
-		log.Printf("Reflect error: %s", err)
+		log.Panicf("iproto.Reader.Reflect: wrong type " + v.Type().String())
 	}
 	return
-}
-
-func (r Reader) IWrite(self interface{}, w *Writer) error {
-	w.Bytes([]byte(r))
-	return nil
 }
 
 type Struct struct{}
 
-func (s Struct) IWrite(self interface{}, w *Writer) (err error) {
+func (s Struct) IWrite(self interface{}, w *Writer) {
 	v := reflect.ValueOf(self)
-	_, err = w.Reflect(v, iNotImplements)
-	return
+	w.Reflect(v, iNotImplements)
 }
 
-func (s Struct) IRead(self interface{}, r Reader) (rest Reader, err error) {
+func (s Struct) IRead(self interface{}, r *Reader) {
 	var v reflect.Value
 	switch d := reflect.ValueOf(self); d.Kind() {
 	case reflect.Ptr:
 		v = d.Elem()
-	case reflect.Slice:
-		v = d
 	default:
-		return nil, errors.New("iproto.Struct.IRead: invalid type " + d.Type().String())
+		r.Err = errors.New("iproto.Struct.IRead: invalid type " + d.Type().String())
+		return
 	}
-	_, rest, err = r.Reflect(v, iNotImplements)
-	return
+	r.Reflect(v, iNotImplements)
 }
 
 type iwriterWrap struct {
 	i interface{}
 }
 
-func (wrap iwriterWrap) IWrite(o interface{}, w *Writer) error {
-	return w.Write(wrap.i)
+func (wrap iwriterWrap) IWrite(o interface{}, w *Writer) {
+	w.Write(wrap.i)
 }
 
-func Wrap2IWriter(i interface{}) (IWriter, error) {
+func Wrap2IWriter(i interface{}) IWriter {
 	if wr, ok := i.(IWriter); ok {
-		return wr, nil
+		return wr
 	} else {
-		return iwriterWrap{i}, nil
+		return iwriterWrap{i}
 	}
 }
 
@@ -958,8 +1049,8 @@ type ireaderWrap struct {
 	i interface{}
 }
 
-func (wrap ireaderWrap) IRead(o interface{}, r Reader) (rest Reader, err error) {
-	return r.Read(wrap.i)
+func (wrap ireaderWrap) IRead(o interface{}, r *Reader) {
+	r.Read(wrap.i)
 }
 
 func Wrap2IReader(i interface{}) (IReader, error) {

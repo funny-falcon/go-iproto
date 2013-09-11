@@ -58,17 +58,16 @@ func (r *OpTestReq) IMsg() iproto.RequestType {
 	return OP_TEST
 }
 
-func (r *OpTestReq) IWrite(o interface{}, w *iproto.Writer) error {
+func (r *OpTestReq) IWrite(o interface{}, w *iproto.Writer) {
 	w.Uint32(r.J)
-	return nil
 }
 
 type Res struct {
 	J uint32
 }
 
-func (r *Res) IRead(o interface{}, read iproto.Reader) (rest iproto.Reader, err error) {
-	r.J, rest, err = read.Uint32()
+func (r *Res) IRead(o interface{}, read *iproto.Reader) {
+	r.J = read.Uint32()
 	return
 }
 
@@ -112,8 +111,8 @@ func sumTestService(cx *iproto.Context) {
 					break
 				}
 				var i Res
-				if _, err := res.Body.Read(&i); err != nil {
-					log.Print(err)
+				if reader := res.Body.Read(&i); reader.Err != nil {
+					log.Println("Read response error:", reader.Rest, reader.Err)
 					mr.Cancel()
 					result = RcError
 					break
