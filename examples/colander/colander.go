@@ -111,8 +111,8 @@ func sumTestService(cx *iproto.Context) {
 					break
 				}
 				var i Res
-				if reader := res.Body.Read(&i); reader.Err != nil {
-					log.Println("Read response error:", reader.Rest, reader.Err)
+				if err := res.Body.ReadAll(&i); err != nil {
+					log.Println(err)
 					mr.Cancel()
 					result = RcError
 					break

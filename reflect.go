@@ -7,9 +7,11 @@ import (
 	"log"
 	"math"
 	"reflect"
+	"sync/atomic"
 )
 
 var _ = log.Print
+var _ = atomic.StoreUint32
 
 const (
 	wDefaultBuf = 512
@@ -474,18 +476,36 @@ func (b Body) IWrite(self interface{}, w *Writer) {
 	w.Bytes([]byte(b))
 }
 
-func (b Body) Reader() Reader {
-	return Reader{Rest: b}
+func (b Body) Reader() (r Reader) {
+	r.Body = b
+	return
 }
 
-func (b Body) Read(i interface{}) Reader {
-	r := b.Reader()
+func (b Body) Read(i interface{}) (r Reader) {
+	r.Body = b
 	r.Read(i)
-	return r
+	return
+}
+
+var readerLock uint32 = 0
+var reader Reader
+func (b Body) ReadAll(i interface{}) error {
+	if atomic.CompareAndSwapUint32(&readerLock, 0, 1) {
+		reader.Body = b
+		reader.Err = nil
+		reader.Read(i)
+		err := reader.Error()
+		atomic.StoreUint32(&readerLock, 0)
+		return err
+	} else {
+		r := Reader{Body: b}
+		r.Read(i)
+		return r.Error()
+	}
 }
 
 type Reader struct {
-	Rest []byte
+	Body []byte
 	Err  error
 }
 
@@ -493,12 +513,12 @@ func (r *Reader) Uint8() (res uint8) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 1 {
+	if len(r.Body) < 1 {
 		r.Err = errors.New("iproto.Reader: not enough data for uint8")
 		return
 	}
-	res = r.Rest[0]
-	r.Rest = r.Rest[1:]
+	res = r.Body[0]
+	r.Body = r.Body[1:]
 	return
 }
 
@@ -506,12 +526,12 @@ func (r *Reader) Int8() (res int8) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 1 {
+	if len(r.Body) < 1 {
 		r.Err = errors.New("iproto.Reader: not enough data for int8")
 		return
 	}
-	res = int8(r.Rest[0])
-	r.Rest = r.Rest[1:]
+	res = int8(r.Body[0])
+	r.Body = r.Body[1:]
 	return
 }
 
@@ -519,12 +539,12 @@ func (r *Reader) Uint16() (res uint16) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 2 {
+	if len(r.Body) < 2 {
 		r.Err = errors.New("iproto.Reader: not enough data for uint16")
 		return
 	}
-	res = le.Uint16(r.Rest)
-	r.Rest = r.Rest[2:]
+	res = le.Uint16(r.Body)
+	r.Body = r.Body[2:]
 	return
 }
 
@@ -532,12 +552,12 @@ func (r *Reader) Int16() (res int16) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 2 {
+	if len(r.Body) < 2 {
 		r.Err = errors.New("iproto.Reader: not enough data for int16")
 		return
 	}
-	res = int16(le.Uint16(r.Rest))
-	r.Rest = r.Rest[2:]
+	res = int16(le.Uint16(r.Body))
+	r.Body = r.Body[2:]
 	return
 }
 
@@ -545,12 +565,12 @@ func (r *Reader) Uint32() (res uint32) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 4 {
+	if len(r.Body) < 4 {
 		r.Err = errors.New("iproto.Reader: not enough data for uint32")
 		return
 	}
-	res = le.Uint32(r.Rest)
-	r.Rest = r.Rest[4:]
+	res = le.Uint32(r.Body)
+	r.Body = r.Body[4:]
 	return
 }
 
@@ -558,12 +578,12 @@ func (r *Reader) Int32() (res int32) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 4 {
+	if len(r.Body) < 4 {
 		r.Err = errors.New("iproto.Reader: not enough data for int32")
 		return
 	}
-	res = int32(le.Uint32(r.Rest))
-	r.Rest = r.Rest[4:]
+	res = int32(le.Uint32(r.Body))
+	r.Body = r.Body[4:]
 	return
 }
 
@@ -571,12 +591,12 @@ func (r *Reader) Uint64() (res uint64) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 8 {
+	if len(r.Body) < 8 {
 		r.Err = errors.New("iproto.Reader: not enough data for uint64")
 		return
 	}
-	res = le.Uint64(r.Rest)
-	r.Rest = r.Rest[8:]
+	res = le.Uint64(r.Body)
+	r.Body = r.Body[8:]
 	return
 }
 
@@ -584,12 +604,12 @@ func (r *Reader) Int64() (res int64) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 8 {
+	if len(r.Body) < 8 {
 		r.Err = errors.New("iproto.Reader: not enough data for int64")
 		return
 	}
-	res = int64(le.Uint64(r.Rest))
-	r.Rest = r.Rest[8:]
+	res = int64(le.Uint64(r.Body))
+	r.Body = r.Body[8:]
 	return
 }
 
@@ -597,12 +617,12 @@ func (r *Reader) Float32() (res float32) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 4 {
+	if len(r.Body) < 4 {
 		r.Err = errors.New("iproto.Reader: not enough data for float32")
 		return
 	}
-	res = math.Float32frombits(le.Uint32(r.Rest))
-	r.Rest = r.Rest[4:]
+	res = math.Float32frombits(le.Uint32(r.Body))
+	r.Body = r.Body[4:]
 	return
 }
 
@@ -610,12 +630,12 @@ func (r *Reader) Float64() (res float64) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < 8 {
+	if len(r.Body) < 8 {
 		r.Err = errors.New("iproto.Reader: not enough data for float64")
 		return
 	}
-	res = math.Float64frombits(le.Uint64(r.Rest))
-	r.Rest = r.Rest[8:]
+	res = math.Float64frombits(le.Uint64(r.Body))
+	r.Body = r.Body[8:]
 	return
 }
 
@@ -623,10 +643,10 @@ func (r *Reader) Uint64var() (res uint64) {
 	if r.Err != nil {
 		return
 	}
-	i, n := binary.Uvarint(r.Rest)
+	i, n := binary.Uvarint(r.Body)
 	if n > 0 {
 		res = i
-		r.Rest = r.Rest[n:]
+		r.Body = r.Body[n:]
 		return
 	} else if n == 0 {
 		r.Err = fmt.Errorf("iproto.Reader: not enough data for uint64var %x", r)
@@ -646,12 +666,12 @@ func (r *Reader) Uint8sl(b []uint8) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b) {
+	if len(r.Body) < len(b) {
 		r.Err = errors.New("iproto.Reader: not enough data for []uint8")
 		return
 	}
-	copy(b, r.Rest)
-	r.Rest = r.Rest[len(b):]
+	copy(b, r.Body)
+	r.Body = r.Body[len(b):]
 	return
 }
 
@@ -659,12 +679,12 @@ func (r *Reader) Bytes(b []byte) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b) {
+	if len(r.Body) < len(b) {
 		r.Err = errors.New("iproto.Reader: not enough data for []byte")
 		return
 	}
-	copy(b, r.Rest)
-	r.Rest = r.Rest[len(b):]
+	copy(b, r.Body)
+	r.Body = r.Body[len(b):]
 	return
 }
 
@@ -672,14 +692,14 @@ func (r *Reader) Int8sl(b []int8) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b) {
+	if len(r.Body) < len(b) {
 		r.Err = errors.New("iproto.Reader: not enough data for []uint8")
 		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = int8(r.Rest[i])
+		b[i] = int8(r.Body[i])
 	}
-	r.Rest = r.Rest[len(b):]
+	r.Body = r.Body[len(b):]
 	return
 }
 
@@ -687,14 +707,14 @@ func (r *Reader) Uint16sl(b []uint16) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b)*2 {
+	if len(r.Body) < len(b)*2 {
 		r.Err = errors.New("iproto.Reader: not enough data for []uint16")
 		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = le.Uint16(r.Rest[i*2:])
+		b[i] = le.Uint16(r.Body[i*2:])
 	}
-	r.Rest = r.Rest[len(b)*2:]
+	r.Body = r.Body[len(b)*2:]
 	return
 }
 
@@ -702,14 +722,14 @@ func (r *Reader) Int16sl(b []int16) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b)*2 {
+	if len(r.Body) < len(b)*2 {
 		r.Err = errors.New("iproto.Reader: not enough data for []int16")
 		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = int16(le.Uint16(r.Rest[i*2:]))
+		b[i] = int16(le.Uint16(r.Body[i*2:]))
 	}
-	r.Rest = r.Rest[len(b)*2:]
+	r.Body = r.Body[len(b)*2:]
 	return
 }
 
@@ -717,14 +737,14 @@ func (r *Reader) Uint32sl(b []uint32) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b)*4 {
+	if len(r.Body) < len(b)*4 {
 		r.Err = errors.New("iproto.Reader: not enough data for []uint32")
 		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = le.Uint32(r.Rest[i*4:])
+		b[i] = le.Uint32(r.Body[i*4:])
 	}
-	r.Rest = r.Rest[len(b)*4:]
+	r.Body = r.Body[len(b)*4:]
 	return
 }
 
@@ -732,14 +752,14 @@ func (r *Reader) Int32sl(b []int32) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b)*4 {
+	if len(r.Body) < len(b)*4 {
 		r.Err = errors.New("iproto.Reader: not enough data for []int32")
 		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = int32(le.Uint32(r.Rest[i*4:]))
+		b[i] = int32(le.Uint32(r.Body[i*4:]))
 	}
-	r.Rest = r.Rest[len(b)*4:]
+	r.Body = r.Body[len(b)*4:]
 	return
 }
 
@@ -747,14 +767,14 @@ func (r *Reader) Uint64sl(b []uint64) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b)*8 {
+	if len(r.Body) < len(b)*8 {
 		r.Err = errors.New("iproto.Reader: not enough data for []uint64")
 		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = le.Uint64(r.Rest[i*8:])
+		b[i] = le.Uint64(r.Body[i*8:])
 	}
-	r.Rest = r.Rest[len(b)*8:]
+	r.Body = r.Body[len(b)*8:]
 	return
 }
 
@@ -762,14 +782,14 @@ func (r *Reader) Int64sl(b []int64) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b)*8 {
+	if len(r.Body) < len(b)*8 {
 		r.Err = errors.New("iproto.Reader: not enough data for []int64")
 		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = int64(le.Uint64(r.Rest[i*8:]))
+		b[i] = int64(le.Uint64(r.Body[i*8:]))
 	}
-	r.Rest = r.Rest[len(b)*8:]
+	r.Body = r.Body[len(b)*8:]
 	return
 }
 
@@ -777,14 +797,14 @@ func (r *Reader) Float32sl(b []float32) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b)*4 {
+	if len(r.Body) < len(b)*4 {
 		r.Err = errors.New("iproto.Reader: not enough data for []float32")
 		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = math.Float32frombits(le.Uint32(r.Rest[i*4:]))
+		b[i] = math.Float32frombits(le.Uint32(r.Body[i*4:]))
 	}
-	r.Rest = r.Rest[len(b)*4:]
+	r.Body = r.Body[len(b)*4:]
 	return
 }
 
@@ -792,14 +812,23 @@ func (r *Reader) Float64sl(b []float64) {
 	if r.Err != nil {
 		return
 	}
-	if len(r.Rest) < len(b)*8 {
+	if len(r.Body) < len(b)*8 {
 		r.Err = errors.New("iproto.Reader: not enough data for []float64")
 		return
 	}
 	for i := 0; i < len(b); i++ {
-		b[i] = math.Float64frombits(le.Uint64(r.Rest[i*8:]))
+		b[i] = math.Float64frombits(le.Uint64(r.Body[i*8:]))
 	}
-	r.Rest = r.Rest[len(b)*8:]
+	r.Body = r.Body[len(b)*8:]
+	return
+}
+
+func (r *Reader) Rest() (res []byte) {
+	if r.Err != nil {
+		return
+	}
+	res = r.Body
+	r.Body = nil
 	return
 }
 
@@ -1008,6 +1037,19 @@ func (r *Reader) Reflect(v reflect.Value, impl Implements) (imp Implements) {
 		log.Panicf("iproto.Reader.Reflect: wrong type " + v.Type().String())
 	}
 	return
+}
+
+func (r Reader) Done() bool {
+	return len(r.Body) == 0 && r.Err == nil
+}
+
+func (r Reader) Error() error {
+	if r.Err != nil {
+		return r.Err
+	} else if len(r.Body) > 0 {
+		return fmt.Errorf("Unparsed body: [% x]", r.Body)
+	}
+	return nil
 }
 
 type Struct struct{}
