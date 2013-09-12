@@ -14,7 +14,8 @@ var _ = log.Print
 var _ = atomic.StoreUint32
 
 const (
-	wDefaultBuf = 512
+	wDefaultBuf = 256
+	wMaxBuf = 4096
 )
 
 var le = binary.LittleEndian
@@ -46,7 +47,7 @@ func ceilLog(n int) int {
 	if n > 0 {
 		n = (n - 1) >> 2
 	}
-	n |= n >> 1
+	n |= n >> 3
 	n |= n >> 2
 	n |= n >> 4
 	n |= n >> 8
@@ -55,20 +56,24 @@ func ceilLog(n int) int {
 }
 
 func (w *Writer) ensure(n int) (l int) {
-	if cap(w.buf)-len(w.buf) < n {
-		newCap := len(w.buf) + n
+	l = len(w.buf)
+	if cap(w.buf)-l < n {
+		newCap := l + n
 		if w.defSize == 0 {
 			w.defSize = wDefaultBuf
+		} else if w.defSize < wMaxBuf{
+			w.defSize = ceilLog(w.defSize+1)
 		}
 		if newCap < w.defSize {
-			newCap = wDefaultBuf
+			newCap = w.defSize
+		} else {
+			newCap = ceilLog(newCap)
 		}
-		tmp := make([]byte, len(w.buf), ceilLog(newCap))
+		tmp := make([]byte, l, newCap)
 		copy(tmp, w.buf)
 		w.buf = tmp
 	}
-	l = len(w.buf)
-	w.buf = w.buf[:len(w.buf)+n]
+	w.buf = w.buf[:l+n]
 	return
 }
 
