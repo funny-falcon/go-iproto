@@ -44,7 +44,6 @@ type Connection struct {
 }
 
 func NewConnection(serv *Server, connection nt.NetConn, id uint64) (conn *Connection) {
-	log.Print("New connection ", id, connection.RemoteAddr())
 	conn = &Connection{
 		Server: serv,
 		Id:     id,
@@ -87,7 +86,7 @@ func (conn *Connection) Respond(r *iproto.Response) {
 }
 
 func (conn *Connection) cancelInFly() {
-	log.Print("Canceling ", len(conn.inFly), " requests ", conn.Id, conn.conn.RemoteAddr())
+	log.Print("Canceling ", len(conn.inFly), " requests ", conn.conn.RemoteAddr())
 	conn.Lock()
 	reqs := make([]*iproto.Request, 0, len(conn.inFly))
 	for _, req := range conn.inFly {
@@ -101,7 +100,6 @@ func (conn *Connection) cancelInFly() {
 }
 
 func (conn *Connection) closed() {
-	log.Print("Closed ", conn.Id, conn.conn.RemoteAddr())
 	conn.buf = nil
 	conn.inFly = nil
 	conn.Server.connClosed <- conn.Id
@@ -116,7 +114,6 @@ func (conn *Connection) controlLoop() {
 			conn.Lock()
 			conn.state &= CsClosed
 			conn.state |= CsReadClosed
-			log.Print("Read Closed ", conn.Id, conn.state, conn.conn.RemoteAddr())
 			if len(conn.inFly)+len(conn.buf)+len(conn.out) == 0 {
 				close(conn.out)
 			}
@@ -124,7 +121,6 @@ func (conn *Connection) controlLoop() {
 		case writeClosed:
 			conn.state &= CsClosed
 			conn.state |= CsWriteClosed
-			log.Print("Write Closed ", conn.Id, conn.state, conn.conn.RemoteAddr(), CsClosed)
 			conn.cancelInFly()
 			if conn.state&CsReadClosed == 0 {
 				conn.conn.CloseRead()
@@ -134,7 +130,6 @@ func (conn *Connection) controlLoop() {
 		}
 
 		if conn.state&CsClosed == CsClosed {
-			log.Print("Breaking control loop")
 			break
 		}
 	}
@@ -184,7 +179,6 @@ func (conn *Connection) readLoop() {
 			Body:      req.Body,
 			Responder: conn,
 		}
-		//request.SetPending()
 		conn.Lock()
 		conn.inFly[request.Id] = request
 		conn.Unlock()

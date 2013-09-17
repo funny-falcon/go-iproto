@@ -44,6 +44,7 @@ type Server struct {
 	connErr chan connection.Error
 	actions chan action
 	exiting bool
+	lastErrTime time.Time
 
 	reconnecter *time.Ticker
 }
@@ -155,7 +156,11 @@ func (serv *Server) onConnError(connErr connection.Error) {
 			log.Printf("%s: established connection %v -> %v", serv.conf.Name, conn.LocalAddr(), conn.RemoteAddr())
 			serv.established++
 		} else {
-			log.Printf("%s: could not connect to %s", serv.conf.Name, serv.conf.Address)
+			now := time.Now()
+			if now.Sub(serv.lastErrTime) > 2*time.Second {
+				serv.lastErrTime = now
+				log.Printf("%s: could not connect to %s", serv.conf.Name, serv.conf.Address)
+			}
 			if _, ok := serv.connections[conn.Id]; !ok {
 				log.Panicf("Unknown connection failed %+v", conn)
 			}
