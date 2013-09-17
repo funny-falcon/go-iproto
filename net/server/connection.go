@@ -86,8 +86,10 @@ func (conn *Connection) Respond(r *iproto.Response) {
 }
 
 func (conn *Connection) cancelInFly() {
-	log.Print("Canceling ", len(conn.inFly), " requests ", conn.conn.RemoteAddr())
 	conn.Lock()
+	if len(conn.inFly) > 0 {
+		log.Print("Canceling ", len(conn.inFly), " requests ", conn.conn.RemoteAddr())
+	}
 	reqs := make([]*iproto.Request, 0, len(conn.inFly))
 	for _, req := range conn.inFly {
 		reqs = append(reqs, req)
