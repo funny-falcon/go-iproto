@@ -14,6 +14,7 @@ type ServerConfig struct {
 
 	Connections int
 
+	DialTimeout  time.Duration
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	PingInterval time.Duration
@@ -51,6 +52,10 @@ func (cfg *ServerConfig) SetDefaults() *ServerConfig {
 
 	if cfg.PingInterval == 0 {
 		cfg.PingInterval = DefaultPingInterval
+	}
+
+	if cfg.DialTimeout == 0 {
+		cfg.DialTimeout = 5 * time.Second
 	}
 
 	return cfg

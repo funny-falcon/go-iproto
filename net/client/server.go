@@ -67,6 +67,7 @@ func (cfg *ServerConfig) NewServer() (serv *Server) {
 				Network:      cfg.Network,
 				Address:      cfg.Address,
 				PingInterval: cfg.PingInterval,
+				DialTimeout:  cfg.DialTimeout,
 				ReadTimeout:  cfg.ReadTimeout,
 				WriteTimeout: cfg.WriteTimeout,
 				RetCodeLen:   cfg.RetCodeLen,
