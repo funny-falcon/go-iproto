@@ -269,7 +269,6 @@ Loop:
 			if err = w.Flush(); err != nil {
 				break Loop
 			}
-			time.Sleep(time.Millisecond)
 			select {
 			case <-pingTicker.C:
 				ping = true
