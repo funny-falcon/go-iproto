@@ -34,7 +34,7 @@ func (sl *SliceReader) Read(n int) (res []byte, err error) {
 	l := len(buf)
 	for l < n && err == nil {
 		var nn int
-		nn, err = sl.r.Read(buf[l:cap(buf)])
+		nn, err = sl.read(buf[l:cap(buf)])
 		l += nn
 	}
 	if l >= n {
@@ -60,7 +60,7 @@ func (sl *SliceReader) ReadByte() (res byte, err error) {
 	if cap(buf) == 0 {
 		buf = make([]byte, len(sl.buf), sl.size)
 	}
-	n, err = sl.r.Read(buf)
+	n, err = sl.read(buf)
 	if n >= 1 {
 		res = buf[0]
 		sl.buf = buf[1:n]
