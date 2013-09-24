@@ -128,7 +128,7 @@ func (conn *Connection) RunWithConn(netconn io.ReadWriteCloser) {
 
 func (conn *Connection) controlLoopExit() {
 	if conn.State&CsWriteClosed == 0 {
-		conn.Stop()
+		conn.conn.CloseWrite()
 	}
 	conn.ConnErr <- Error{conn, Read, conn.readErr}
 	conn.flushInFly()
@@ -148,7 +148,7 @@ func (conn *Connection) controlLoop() {
 			conn.State &= CsClosed
 			conn.State |= CsReadClosed
 			if conn.State&CsWriteClosed == 0 {
-				conn.Stop()
+				conn.conn.CloseWrite()
 			}
 		case readEmpty:
 		}

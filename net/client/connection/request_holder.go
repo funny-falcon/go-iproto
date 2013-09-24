@@ -102,9 +102,10 @@ func (h *RequestHolder) getAll() (reqs []*Request) {
 	reqs = make([]*Request, h.got-h.put)
 	i := 0
 	for _, row := range h.reqs {
-		for _, req := range row.reqs {
+		for j := range row.reqs {
+			req := &row.reqs[j]
 			if req.fakeId != 0 && req.Request != nil {
-				reqs[i] = &req
+				reqs[i] = req
 				i++
 			}
 		}
