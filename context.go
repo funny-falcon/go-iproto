@@ -216,8 +216,7 @@ func (c *Context) NewMulti() (multi *MultiRequest) {
 	return multi
 }
 
-func (c *Context) SendMsgBody(serv Service, msg RequestType, body interface{}) (res <-chan *Response) {
-	var req *Request
+func (c *Context) SendMsgBody(serv Service, msg RequestType, body interface{}) (req *Request, res <-chan *Response) {
 	var wr IWriter
 	var ok bool
 	if wr, ok = body.(IWriter); !ok {
@@ -225,7 +224,7 @@ func (c *Context) SendMsgBody(serv Service, msg RequestType, body interface{}) (
 	}
 	req, res = c.NewRequest(msg, wr)
 	serv.Send(req)
-	return res
+	return
 }
 
 func (c *Context) CallMsgBody(serv Service, msg RequestType, body interface{}) *Response {
