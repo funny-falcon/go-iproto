@@ -83,6 +83,10 @@ func (s *SimplePoint) Runned() bool {
 	return s.b.ch != nil
 }
 
+func (s *SimplePoint) Standalone() bool {
+	return s.standalone
+}
+
 func (s *SimplePoint) Run(ch chan *Request) {
 	if ch == nil {
 		ch = make(chan *Request, 16*1024)
