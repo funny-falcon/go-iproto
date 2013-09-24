@@ -22,11 +22,11 @@ func (b BF) New(f func(*Context)) (serv *ParallelService) {
 			Timeout: b.Timeout,
 		},
 		f:    f,
-		sema: make(chan bool, b.N),
+		sema: make(chan struct{}, b.N),
 	}
 	serv.SimplePoint.Init(serv)
 	for i := 0; i < b.N; i++ {
-		serv.sema <- true
+		serv.sema <- struct{}{}
 	}
 	Run(serv)
 	return
@@ -36,7 +36,7 @@ type ParallelService struct {
 	SimplePoint
 	sync.Mutex
 	f    func(*Context)
-	sema chan bool
+	sema chan struct{}
 }
 
 type parMiddle struct {
@@ -45,9 +45,7 @@ type parMiddle struct {
 }
 
 func (p *parMiddle) Respond(res *Response) {
-	p.serv.Lock()
-	p.serv.sema <- true
-	p.serv.Unlock()
+	p.serv.sema <- struct{}{}
 }
 
 func (serv *ParallelService) Loop() {
@@ -90,7 +88,7 @@ Loop:
 				go serv.f(ctx)
 			}
 		} else {
-			serv.sema <- true
+			serv.sema <- struct{}{}
 		}
 	}
 
