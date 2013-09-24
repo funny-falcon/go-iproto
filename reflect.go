@@ -15,7 +15,7 @@ var _ = atomic.StoreUint32
 
 const (
 	wDefaultBuf = 256
-	wMaxBuf = 4096
+	wMaxBuf     = 4096
 )
 
 var le = binary.LittleEndian
@@ -61,8 +61,8 @@ func (w *Writer) ensure(n int) (l int) {
 		newCap := l + n
 		if w.defSize == 0 {
 			w.defSize = wDefaultBuf
-		} else if w.defSize < wMaxBuf{
-			w.defSize = ceilLog(w.defSize+1)
+		} else if w.defSize < wMaxBuf {
+			w.defSize = ceilLog(w.defSize + 1)
 		}
 		if newCap < w.defSize {
 			newCap = w.defSize
@@ -477,6 +477,7 @@ func (w *Writer) Reflect(v reflect.Value, impl Implements) (imp Implements) {
 }
 
 type Body []byte
+
 func (b Body) IWrite(self interface{}, w *Writer) {
 	w.Bytes([]byte(b))
 }
@@ -494,6 +495,7 @@ func (b Body) Read(i interface{}) (r Reader) {
 
 var readerLock uint32 = 0
 var reader Reader
+
 func (b Body) ReadAll(i interface{}) error {
 	if atomic.CompareAndSwapUint32(&readerLock, 0, 1) {
 		reader.Body = b
