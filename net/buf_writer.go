@@ -90,7 +90,7 @@ func (w *BufWriter) write(buf []byte) (err error) {
 			w.d, _ = w.w.(SetDeadliner)
 		}
 		if w.d != nil {
-			w.d.SetReadDeadline(time.Now().Add(w.timeout))
+			w.d.SetWriteDeadline(time.Now().Add(w.timeout))
 		}
 	}
 
