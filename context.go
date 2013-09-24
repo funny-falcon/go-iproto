@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	cxReqBuf = 16
+	cxReqBuf    = 16
+	cxReqBufMax = 128
 )
 
 type contextMiddleware struct {
@@ -61,6 +62,7 @@ type Context struct {
 	cancelsm  map[Canceler]struct{}
 	reqBuf    []Request
 	resBuf    []Response
+	nBuf      uint32
 	reqId     uint32
 	cancelBuf []contextMiddleware
 	writer    Writer
@@ -158,8 +160,13 @@ func (c *Context) Respond(code RetCode, val interface{}) {
 
 func (c *Context) request(id uint32, msg RequestType, val IWriter) (r *Request) {
 	if len(c.reqBuf) == 0 {
-		c.reqBuf = make([]Request, cxReqBuf)
-		c.resBuf = make([]Response, cxReqBuf)
+		if c.nBuf == 0 {
+			c.nBuf = cxReqBuf
+		} else if c.nBuf < cxReqBufMax {
+			c.nBuf = uint32(ceilLog(int(c.nBuf) + 1))
+		}
+		c.reqBuf = make([]Request, c.nBuf)
+		c.resBuf = make([]Response, c.nBuf)
 	}
 
 	val.IWrite(val, &c.writer)
