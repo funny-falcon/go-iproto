@@ -166,11 +166,17 @@ func (serv *Server) onConnError(connErr connection.Error) {
 				log.Panicf("Unknown connection failed %+v", conn)
 			}
 			delete(serv.connections, conn.Id)
+			if serv.established == 0 && serv.Standalone() {
+				serv.AllDisconnected()
+			}
 		}
 	case connection.Write:
 		log.Printf("%s: write side closed %v -> %v", serv.conf.Name, conn.LocalAddr(), conn.RemoteAddr())
 		serv.established--
 		serv.dying++
+		if serv.established == 0 && serv.Standalone() {
+			serv.AllDisconnected()
+		}
 	case connection.Read:
 		log.Printf("%s: read side closed %v -> %v", serv.conf.Name, conn.LocalAddr(), conn.RemoteAddr())
 		serv.dying--
@@ -183,4 +189,24 @@ func (serv *Server) onConnError(connErr connection.Error) {
 
 func (serv *Server) SetConnections(n int) {
 	serv.actions <- action{kind: setServ, servs: n}
+}
+
+func (serv *Server) AllDisconnected() {
+	ch := serv.ReceiveChan()
+Loop:
+	for i := len(ch); i > 0; i-- {
+		select {
+		case req, ok := <-ch:
+			if !ok {
+				break Loop
+			}
+			req.Respond(iproto.RcIOError, nil)
+		default:
+			break Loop
+		}
+	}
+}
+
+func (serv *Server) AnyConnected() bool {
+	return serv.established > 0
 }
