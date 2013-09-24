@@ -99,11 +99,11 @@ func main() {
 	point = serv
 
 	accum := Accum{Min: ^uint64(0)}
-	var body []byte
+	var body iproto.Body
 	if action == 1 {
-		body = []byte{}
+		body = iproto.Body{}
 	} else if action == 2 {
-		body = []byte("asdf")
+		body = iproto.Body("asdf")
 	} else {
 		log.Panicf("Action should be 1 or 2")
 	}
