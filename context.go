@@ -169,8 +169,12 @@ func (c *Context) request(id uint32, msg RequestType, val IWriter) (r *Request) 
 		c.resBuf = make([]Response, c.nBuf)
 	}
 
-	val.IWrite(val, &c.writer)
-	body := c.writer.Written()
+	var body []byte
+	var ok bool
+	if body, ok = val.(Body); !ok {
+		val.IWrite(val, &c.writer)
+		body = c.writer.Written()
+	}
 
 	r = &c.reqBuf[0]
 	c.reqBuf = c.reqBuf[1:]
