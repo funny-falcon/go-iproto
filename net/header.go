@@ -2,6 +2,7 @@ package net
 
 import (
 	"encoding/binary"
+	"errors"
 	"github.com/funny-falcon/go-iproto"
 	"io"
 	"time"
@@ -94,6 +95,21 @@ func (h *HeaderReader) ReadResponse(retCodeLen int) (res Response, err error) {
 	return
 }
 
+func (h *HeaderReader) ReadPing() (err error) {
+	var head []byte
+	if head, err = h.r.Read(12); err != nil {
+		return
+	}
+
+	msg := iproto.RequestType(bin_le.Uint32(head[:4]))
+	id := bin_le.Uint32(head[8:])
+
+	if msg != iproto.Ping || id != iproto.PingRequestId {
+		err = errors.New("Iproto ping failed")
+	}
+	return
+}
+
 type HeaderWriter struct {
 	w BufWriter
 }
@@ -107,6 +123,15 @@ func (h *HeaderWriter) WriteRequest(req Request) (err error) {
 		err = h.w.Write(req.Body)
 	}
 	return
+}
+
+func (h *HeaderWriter) Ping() (err error) {
+	ping := Request{
+		Msg:  iproto.Ping,
+		Body: make([]byte, 0),
+		Id:   iproto.PingRequestId,
+	}
+	return h.WriteRequest(ping)
 }
 
 func (h *HeaderWriter) WriteResponse(res Response, retCodeLen int) (err error) {

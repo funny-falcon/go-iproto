@@ -76,6 +76,9 @@ type Connection struct {
 	shutdown bool
 
 	loopNotify chan notifyAction
+
+	reader nt.HeaderReader
+	writer nt.HeaderWriter
 }
 
 var _ iproto.EndPoint = (*Connection)(nil)
@@ -104,6 +107,19 @@ func (conn *Connection) Loop() {
 		conn.State = CsClosed
 	} else {
 		conn.conn = netconn.(nt.NetConn)
+		conn.reader.Init(conn.conn, conn.ReadTimeout)
+		conn.writer.Init(conn.conn, conn.WriteTimeout)
+		if err = conn.writer.Ping(); err == nil {
+			if err = conn.writer.Flush(); err == nil {
+				err = conn.reader.ReadPing()
+			}
+		}
+		if err != nil {
+			conn.conn.Close()
+			conn.ConnErr <- Error{conn, Dial, err}
+			conn.State = CsClosed
+			return
+		}
 		conn.ConnErr <- Error{conn, Dial, nil}
 		conn.State = CsConnected
 		go conn.readLoop()
@@ -186,8 +202,7 @@ func (conn *Connection) notifyLoop(action notifyAction) {
 
 func (conn *Connection) readLoop() {
 	var res nt.Response
-	var r nt.HeaderReader
-	r.Init(conn.conn, conn.ReadTimeout)
+	r := conn.reader
 
 	defer conn.notifyLoop(readClosed)
 
@@ -213,10 +228,9 @@ const fakePingInterval = 1 * time.Hour
 
 func (conn *Connection) writeLoop() {
 	var err error
-	var w nt.HeaderWriter
 	var pingTicker *time.Ticker
 
-	w.Init(conn.conn, conn.WriteTimeout)
+	w := conn.writer
 
 	if conn.PingInterval > 0 {
 		pingTicker = time.NewTicker(conn.PingInterval)
@@ -267,11 +281,7 @@ Loop:
 		}
 
 		if ping {
-			requestHeader = nt.Request{
-				Msg:  iproto.Ping,
-				Body: make([]byte, 0),
-				Id:   iproto.PingRequestId,
-			}
+			err = w.Ping()
 		} else {
 			if req == nil {
 				req = conn.inFly.getNext(conn)
@@ -285,9 +295,10 @@ Loop:
 				Body: request.Body,
 			}
 			req = nil
-		}
 
-		if err = w.WriteRequest(requestHeader); err != nil {
+			err = w.WriteRequest(requestHeader)
+		}
+		if err != nil {
 			break
 		}
 	}
