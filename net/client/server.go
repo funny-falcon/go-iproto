@@ -41,9 +41,9 @@ type Server struct {
 	established int
 	dying       int
 
-	connErr chan connection.Error
-	actions chan action
-	exiting bool
+	connErr     chan connection.Error
+	actions     chan action
+	exiting     bool
 	lastErrTime time.Time
 
 	reconnecter *time.Ticker
