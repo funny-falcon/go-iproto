@@ -43,6 +43,7 @@ func (serv *Server) Run() (err error) {
 	if serv.listener, err = net.Listen(serv.Network, serv.Address); err != nil {
 		return
 	}
+	log.Println("Binded to", serv.Address)
 
 	go serv.listenLoop()
 	go serv.controlLoop()
