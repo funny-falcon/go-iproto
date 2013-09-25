@@ -45,11 +45,15 @@ func (r *Request) SetTimeout(timeout time.Duration) {
 }
 
 func (r *Request) Expire() {
-	r.respondFail(RcTimeout)
+	r.RespondFail(RcTimeout)
 }
 
 func (r *Request) Cancel() {
-	r.respondFail(RcCanceled)
+	r.RespondFail(RcCanceled)
+}
+
+func (r *Request) IOError() {
+	r.RespondFail(RcIOError)
 }
 
 func (r *Request) State() uint32 {
@@ -148,7 +152,7 @@ func (r *Request) Respond(code RetCode, body []byte) {
 	r.Unlock()
 }
 
-func (r *Request) respondFail(code RetCode) {
+func (r *Request) RespondFail(code RetCode) {
 	r.Lock()
 	if r.state&RsPerforming == 0 {
 		r.chainResponse(code, nil)

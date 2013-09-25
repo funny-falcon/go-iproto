@@ -200,7 +200,7 @@ Loop:
 			if !ok {
 				break Loop
 			}
-			req.Respond(iproto.RcIOError, nil)
+			req.IOError()
 		default:
 			break Loop
 		}
