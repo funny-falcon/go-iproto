@@ -105,6 +105,15 @@ func (r *Request) ResetToPending() bool {
 	return false
 }
 
+func (r *Request) ResetToNew() bool {
+	if r.state == RsPrepared {
+		r.state = RsNew
+		return true
+	}
+	log.Panicf("ResetToPending should be called only for performed requests")
+	return false
+}
+
 func (r *Request) chainResponse(code RetCode, body []byte) {
 	if r.Response == nil {
 		r.Response = &Response{Id: r.Id, Msg: r.Msg}
