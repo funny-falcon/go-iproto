@@ -263,20 +263,22 @@ func (c *Context) Timeout() bool {
 	return c.RetCode == RcTimeout
 }
 
-func (c *Context) Child() (child *Context) {
+func (c *Context) Child() (child *Context, ok bool) {
 	child = &Context{parent: c}
 	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
-	if rc == RcCanceled || rc == RcTimeout {
-		child.Cancel()
-	} else {
+	if ok = !(rc == RcCanceled || rc == RcTimeout); ok {
 		c.AddCanceler(child)
+	} else {
+		child.Cancel()
 	}
 	return
 }
 
 func (c *Context) Go(f func(cx *Context)) (child *Context) {
-	child = c.Child()
-	go child.go_(f)
+	var ok bool
+	if child, ok = c.Child(); ok {
+		go child.go_(f)
+	}
 	return
 }
 
@@ -286,8 +288,10 @@ func (child *Context) go_(f func(cx *Context)) {
 }
 
 func (c *Context) GoInt(f func(*Context, interface{}), i interface{}) (child *Context) {
-	child = c.Child()
-	go child.goInt(f, i)
+	var ok bool
+	if child, ok = c.Child(); ok {
+		go child.goInt(f, i)
+	}
 	return
 }
 
@@ -305,14 +309,18 @@ func (c *Context) WaitAll() {
 }
 
 func (c *Context) GoAsync(f func(cx *Context)) (child *Context) {
-	child = c.Child()
-	go f(child)
+	var ok bool
+	if child, ok = c.Child(); ok {
+		go f(child)
+	}
 	return
 }
 
 func (c *Context) GoIntAsync(f func(*Context, interface{}), i interface{}) (child *Context) {
-	child = c.Child()
-	go f(child, i)
+	var ok bool
+	if child, ok = c.Child(); ok {
+		go f(child, i)
+	}
 	return
 }
 
