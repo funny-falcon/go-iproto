@@ -63,7 +63,7 @@ type Context struct {
 	reqId     uint32
 	cancelBuf []contextMiddleware
 	writer    Writer
-	gen      *RRGenerator
+	gen       *RRGenerator
 }
 
 func (c *Context) RemoveCanceler(cn Canceler) {
@@ -210,11 +210,7 @@ func (c *Context) NewMulti() (multi *MultiRequest) {
 }
 
 func (c *Context) SendMsgBody(serv Service, msg RequestType, body interface{}) (req *Request, res <-chan *Response) {
-	var wr IWriter
-	var ok bool
-	if wr, ok = body.(IWriter); !ok {
-		wr = Wrap2IWriter(body)
-	}
+	wr := Wrap2IWriter(body)
 	req, res = c.NewRequest(msg, wr)
 	serv.Send(req)
 	return
@@ -222,11 +218,7 @@ func (c *Context) SendMsgBody(serv Service, msg RequestType, body interface{}) (
 
 func (c *Context) CallMsgBody(serv Service, msg RequestType, body interface{}) *Response {
 	var req *Request
-	var wr IWriter
-	var ok bool
-	if wr, ok = body.(IWriter); !ok {
-		wr = Wrap2IWriter(body)
-	}
+	wr := Wrap2IWriter(body)
 	req, res := c.NewRequest(msg, wr)
 	serv.Send(req)
 	return <-res
