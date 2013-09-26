@@ -56,12 +56,24 @@ func (serv *ParallelService) Loop() {
 Loop:
 	for {
 		select {
-		case req, ok = <-serv.ReceiveChan():
-			if !ok {
-				break Loop
-			}
 		case <-serv.ExitChan():
 			break Loop
+		default:
+			select {
+			case req, ok = <-serv.ReceiveChan():
+				if !ok {
+					break Loop
+				}
+			default:
+				select {
+				case req, ok = <-serv.ReceiveChan():
+					if !ok {
+						break Loop
+					}
+				case <-serv.ExitChan():
+					break Loop
+				}
+			}
 		}
 
 		if buf == nil {
@@ -77,10 +89,20 @@ Loop:
 		}
 
 		select {
-		case <-serv.sema:
 		case <-serv.ExitChan():
 			req.Respond(RcShutdown, nil)
 			break Loop
+		default:
+			select {
+			case <-serv.sema:
+			default:
+				select {
+				case <-serv.sema:
+				case <-serv.ExitChan():
+					req.Respond(RcShutdown, nil)
+					break Loop
+				}
+			}
 		}
 
 		if req.ChainMiddleware(mid) {
