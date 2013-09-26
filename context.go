@@ -60,12 +60,10 @@ type Context struct {
 	cancels   [2]Canceler
 	cancelsn  int
 	cancelsm  map[Canceler]struct{}
-	reqBuf    []Request
-	resBuf    []Response
-	nBuf      uint32
 	reqId     uint32
 	cancelBuf []contextMiddleware
 	writer    Writer
+	gen      *RRGenerator
 }
 
 func (c *Context) RemoveCanceler(cn Canceler) {
@@ -156,17 +154,12 @@ func (c *Context) Respond(code RetCode, val interface{}) {
 		w.Write(val)
 		req.Respond(code, w.Written())
 	}
+	PutGenerator(c.gen)
 }
 
 func (c *Context) request(id uint32, msg RequestType, val IWriter) (r *Request) {
-	if len(c.reqBuf) == 0 {
-		if c.nBuf == 0 {
-			c.nBuf = cxReqBuf
-		} else if c.nBuf < cxReqBufMax {
-			c.nBuf = uint32(ceilLog(int(c.nBuf) + 1))
-		}
-		c.reqBuf = make([]Request, c.nBuf)
-		c.resBuf = make([]Response, c.nBuf)
+	if c.gen == nil {
+		c.gen = GetGenerator()
 	}
 
 	var body []byte
@@ -176,13 +169,9 @@ func (c *Context) request(id uint32, msg RequestType, val IWriter) (r *Request) 
 		body = c.writer.Written()
 	}
 
-	r = &c.reqBuf[0]
-	c.reqBuf = c.reqBuf[1:]
+	r, _ = c.gen.Pair()
 	r.Id = id
 	r.Msg = msg
-	r.Response = &c.resBuf[0]
-	c.resBuf = c.resBuf[1:]
-
 	r.Body = body
 	return
 }
@@ -326,4 +315,49 @@ func (c *Context) GoIntAsync(f func(*Context, interface{}), i interface{}) (chil
 
 func (child *Context) Done() {
 	child.parent.RemoveCanceler(child)
+	PutGenerator(child.gen)
+}
+
+const rrsize = 32
+
+type RRGenerator struct {
+	req *[rrsize]Request
+	res *[rrsize]Response
+	i   int32
+}
+
+func (gen *RRGenerator) Pair() (req *Request, res *Response) {
+	if gen.req == nil {
+		gen.req = &[rrsize]Request{}
+		gen.res = &[rrsize]Response{}
+	}
+	req = &gen.req[gen.i]
+	res = &gen.res[gen.i]
+	req.Response = res
+	if gen.i++; gen.i == rrsize {
+		gen.i = 0
+		gen.req = nil
+		gen.res = nil
+	}
+	return
+}
+
+var gencache = make(chan *RRGenerator, 1024)
+
+func GetGenerator() (gen *RRGenerator) {
+	select {
+	case gen = <-gencache:
+	default:
+		gen = &RRGenerator{}
+	}
+	return
+}
+
+func PutGenerator(gen *RRGenerator) {
+	if gen != nil {
+		select {
+		case gencache <- gen:
+		default:
+		}
+	}
 }
