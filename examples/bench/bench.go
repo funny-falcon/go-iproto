@@ -7,7 +7,9 @@ import (
 	"github.com/funny-falcon/go-iproto/net/client"
 	"log"
 	"math"
+	"os"
 	"runtime"
+	"runtime/pprof"
 	"time"
 )
 
@@ -67,6 +69,9 @@ func (e *Epoch) Respond(res *iproto.Response) {
 	e.Accum.Epoch(iproto.NowEpoch().Sub(e.Epoch), res.Valid())
 }
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+var memprofile = flag.String("memprofile", "", "write memory profile to file")
+
 func main() {
 	var n, c, p, g, batch int
 	var actioni int
@@ -79,6 +84,15 @@ func main() {
 	flag.IntVar(&p, "p", 8765, "Colander port")
 	flag.IntVar(&actioni, "a", 1, "Action: 1 - sumtest, 2 - echo")
 	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	action := iproto.RequestType(actioni)
 
@@ -143,4 +157,12 @@ func main() {
 	}
 	point.Stop()
 
+	if *memprofile != "" {
+		f, err := os.Create(*memprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.WriteHeapProfile(f)
+		f.Close()
+	}
 }
