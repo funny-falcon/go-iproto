@@ -61,6 +61,10 @@ type MultiRequest struct {
 	bodyn     uint32
 }
 
+func (w *MultiRequest) Timer() *Timer {
+	return &w.timer
+}
+
 func (w *MultiRequest) TimeoutFrom(d Service) {
 	w.SetTimeout(d.DefaultTimeout())
 }
@@ -68,8 +72,7 @@ func (w *MultiRequest) TimeoutFrom(d Service) {
 func (w *MultiRequest) SetTimeout(timeout time.Duration) {
 	if timeout > 0 && !w.timerSet {
 		w.timerSet = true
-		w.timer.E = w
-		w.timer.After(timeout)
+		w.timer.After(timeout, w)
 	}
 }
 

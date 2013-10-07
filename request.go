@@ -39,9 +39,12 @@ type Request struct {
 func (r *Request) SetTimeout(timeout time.Duration) {
 	if timeout > 0 && !r.timerSet {
 		r.timerSet = true
-		r.timer.E = r
-		r.timer.After(timeout)
+		r.timer.After(timeout, r)
 	}
+}
+
+func (r *Request) Timer() *Timer {
+	return &r.timer
 }
 
 func (r *Request) Expire() {
