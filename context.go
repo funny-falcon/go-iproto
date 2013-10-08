@@ -273,8 +273,9 @@ func (c *Context) GoIntAsync(f func(*Context, interface{}), i interface{}) (chil
 }
 
 func (c *Context) Done() {
-	if c.parent != nil {
-		c.parent.RemoveCanceler(c)
+	if parent := c.parent; parent != nil {
+		c.parent = nil
+		parent.RemoveCanceler(c)
 	}
 	if c.owngen {
 		c.owngen = false
