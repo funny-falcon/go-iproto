@@ -197,10 +197,12 @@ const (
 
 const rrsize = 32
 
+type generators chan *RGenerator
 type RGenerator struct {
 	req *[rrsize]Request
 	res *[rrsize]Response
 	w   Writer
+	g   generators
 	i   int32
 }
 
@@ -228,22 +230,28 @@ func (gen *RGenerator) Request(id uint32, msg RequestType, val IWriter) (req *Re
 	return
 }
 
-var gencache = make(chan *RGenerator, 1024)
+func (gen *RGenerator) Release() {
+	if gen != nil && gen.g != nil {
+		g := gen.g
+		gen.g = nil
+		select {
+		case g <- gen:
+		default:
+		}
+	}
+}
 
-func GetGenerator() (gen *RGenerator) {
+func (g generators) Get() (gen *RGenerator) {
 	select {
-	case gen = <-gencache:
+	case gen = <-g:
 	default:
-		gen = &RGenerator{}
+		gen = &RGenerator{g: g}
 	}
 	return
 }
 
-func PutGenerator(gen *RGenerator) {
-	if gen != nil {
-		select {
-		case gencache <- gen:
-		default:
-		}
-	}
+var gencache = make(generators, 128)
+
+func GetGenerator() *RGenerator {
+	return gencache.Get()
 }

@@ -58,6 +58,7 @@ type MultiRequest struct {
 	w         sync.Cond
 	timer     Timer
 	timerSet  bool
+	owngen    bool
 	kind      uint32
 	bodyn     uint32
 }
@@ -80,6 +81,7 @@ func (w *MultiRequest) SetTimeout(timeout time.Duration) {
 func (w *MultiRequest) Request(msg RequestType, body IWriter) *Request {
 	if w.gen == nil {
 		w.gen = GetGenerator()
+		w.owngen = true
 	}
 	req := w.gen.Request(uint32(len(w.requests)), msg, body)
 	req.Responder = w
@@ -121,6 +123,9 @@ func (w *MultiRequest) Each() <-chan *Response {
 		w.performFailAll()
 	}
 	w.m.Lock()
+	if w.owngen {
+		w.gen.Release()
+	}
 	w.setKind(mrChan)
 	w.ch = make(chan *Response, w.r)
 
@@ -141,6 +146,9 @@ func (w *MultiRequest) Results() MultiResponse {
 		w.performFailAll()
 	}
 	w.m.Lock()
+	if w.owngen {
+		w.gen.Release()
+	}
 	w.setKind(mrWait)
 	w.w.L = &w.m
 	if cap(w.responses) < len(w.requests) {

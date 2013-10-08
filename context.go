@@ -61,8 +61,9 @@ type Context struct {
 	cancelsn  int
 	cancelsm  map[Canceler]struct{}
 	reqId     uint32
-	cancelBuf []contextMiddleware
+	owngen    bool
 	gen       *RGenerator
+	cancelBuf []contextMiddleware
 }
 
 func (c *Context) RemoveCanceler(cn Canceler) {
@@ -152,13 +153,16 @@ func (c *Context) Respond(code RetCode, val interface{}) {
 		w.Write(val)
 		req.Respond(code, w.Written())
 	}
-	PutGenerator(c.gen)
+	if c.owngen {
+		c.gen.Release()
+	}
 }
 
 func (c *Context) NewRequest(msg RequestType, body IWriter) (r *Request, res <-chan *Response) {
 	c.reqId++
 	if c.gen == nil {
 		c.gen = GetGenerator()
+		c.owngen = true
 	}
 	r = c.gen.Request(c.reqId, msg, body)
 	ch := make(Chan, 1)
@@ -183,6 +187,7 @@ func (c *Context) NewRequest(msg RequestType, body IWriter) (r *Request, res <-c
 func (c *Context) NewMulti() (multi *MultiRequest) {
 	if c.gen == nil {
 		c.gen = GetGenerator()
+		c.owngen = true
 	}
 	multi = &MultiRequest{cx: c, gen: c.gen}
 	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
@@ -292,5 +297,7 @@ func (c *Context) GoIntAsync(f func(*Context, interface{}), i interface{}) (chil
 
 func (child *Context) Done() {
 	child.parent.RemoveCanceler(child)
-	PutGenerator(child.gen)
+	if child.owngen {
+		child.gen.Release()
+	}
 }
