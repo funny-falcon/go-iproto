@@ -23,6 +23,7 @@ func (b BF) New(f func(*Context, *Request) (RetCode, interface{})) (serv *Parall
 		},
 		f:    f,
 		sema: make(chan struct{}, b.N),
+		gens: make(generators, b.N),
 	}
 	serv.SimplePoint.Init(serv)
 	for i := 0; i < b.N; i++ {
@@ -37,6 +38,7 @@ type ParallelService struct {
 	sync.Mutex
 	f    func(*Context, *Request) (RetCode, interface{})
 	sema chan struct{}
+	gens generators
 }
 
 func (serv *ParallelService) Loop() {
@@ -83,6 +85,7 @@ Loop:
 		}
 
 		if ctx := req.Context(); ctx != nil {
+			ctx.gen = serv.gens.Get()
 			go serv.serv(ctx)
 		} else {
 			serv.sema <- struct{}{}
@@ -99,6 +102,7 @@ Loop:
 
 func (serv *ParallelService) inc(ctx *ReqContext) {
 	ctx.Done()
+	ctx.gen.Release()
 	serv.sema <- struct{}{}
 }
 
