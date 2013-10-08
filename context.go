@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 )
 
+var _ = log.Print
+
 const (
 	cxReqBuf    = 16
 	cxReqBufMax = 128
@@ -33,30 +35,19 @@ type Canceler interface {
 	Cancel()
 }
 
-type cxAsMid struct {
-	Middleware
-	cx *Context
-}
+type CxState uint32
 
-func (cm *cxAsMid) Respond(res *Response) {
-	if cx := cm.cx; cx == nil {
-		return
-	} else if res.Code == RcCanceled {
-		cx.Cancel()
-	} else if res.Code == RcTimeout {
-		cx.Expire()
-		cm.Request.ResetToPending()
-		cm.Request.SetInFly(nil)
-	}
-}
+const (
+	CxCanceled = CxState(1)
+	CxTimeout  = CxState(2)
+)
 
 type Context struct {
 	// RetCode stores return code if case when original request were canceled or expired
-	*cxAsMid
-	RetCode
+	State     CxState
 	parent    *Context
 	m         sync.Mutex
-	child     sync.Cond
+	childCond sync.Cond
 	cancels   [2]Canceler
 	cancelsn  int
 	cancelsm  map[Canceler]struct{}
@@ -80,7 +71,7 @@ func (c *Context) RemoveCanceler(cn Canceler) {
 		delete(c.cancelsm, cn)
 	}
 	if c.cancelsn == 0 && len(c.cancelsm) == 0 {
-		c.child.Signal()
+		c.childCond.Signal()
 	}
 	c.m.Unlock()
 }
@@ -88,8 +79,8 @@ func (c *Context) RemoveCanceler(cn Canceler) {
 func (c *Context) AddCanceler(cn Canceler) {
 	var ok bool
 	c.m.Lock()
-	c.child.L = &c.m
-	ok = c.RetCode != RcCanceled && c.RetCode != RcTimeout
+	c.childCond.L = &c.m
+	ok = c.State == 0
 	if ok {
 		var i int
 		for i = 0; i < len(c.cancels); i++ {
@@ -133,28 +124,14 @@ func (c *Context) cancelAll() {
 }
 
 func (c *Context) Cancel() {
-	if atomic.CompareAndSwapUint32((*uint32)(&c.RetCode), 0, uint32(RcCanceled)) {
+	if atomic.CompareAndSwapUint32((*uint32)(&c.State), 0, uint32(CxCanceled)) {
 		c.cancelAll()
 	}
 }
 
 func (c *Context) Expire() {
-	if atomic.CompareAndSwapUint32((*uint32)(&c.RetCode), 0, uint32(RcTimeout)) {
+	if atomic.CompareAndSwapUint32((*uint32)(&c.State), 0, uint32(CxTimeout)) {
 		c.cancelAll()
-	}
-}
-
-func (c *Context) Respond(code RetCode, val interface{}) {
-	if c.cxAsMid == nil {
-		log.Panicf("Context has no binded request")
-	}
-	if req := c.Request; req != nil {
-		w := Writer{defSize: 64}
-		w.Write(val)
-		req.Respond(code, w.Written())
-	}
-	if c.owngen {
-		c.gen.Release()
 	}
 }
 
@@ -168,8 +145,8 @@ func (c *Context) NewRequest(msg RequestType, body IWriter) (r *Request, res <-c
 	ch := make(Chan, 1)
 	res, r.Responder = ch, ch
 
-	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
-	if rc == RcCanceled || rc == RcTimeout {
+	rc := RetCode(atomic.LoadUint32((*uint32)(&c.State)))
+	if rc != 0 {
 		r.Cancel()
 	} else {
 		if len(c.cancelBuf) == 0 {
@@ -190,8 +167,8 @@ func (c *Context) NewMulti() (multi *MultiRequest) {
 		c.owngen = true
 	}
 	multi = &MultiRequest{cx: c, gen: c.gen}
-	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
-	if rc == RcCanceled || rc == RcTimeout {
+	rc := RetCode(atomic.LoadUint32((*uint32)(&c.State)))
+	if rc != 0 {
 		multi.Cancel()
 	} else {
 		c.AddCanceler(multi)
@@ -227,17 +204,17 @@ func (c *Context) Call(serv Service, r RequestData) *Response {
 }
 
 func (c *Context) Alive() bool {
-	return c.RetCode == 0
+	return c.State == 0
 }
 
 func (c *Context) Timeout() bool {
-	return c.RetCode == RcTimeout
+	return c.State == CxTimeout
 }
 
 func (c *Context) Child() (child *Context, ok bool) {
 	child = &Context{parent: c}
-	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
-	if ok = !(rc == RcCanceled || rc == RcTimeout); ok {
+	rc := CxState(atomic.LoadUint32((*uint32)(&c.State)))
+	if rc == 0 {
 		c.AddCanceler(child)
 	} else {
 		child.Cancel()
@@ -254,7 +231,7 @@ func (c *Context) Go(f func(cx *Context)) (child *Context) {
 }
 
 func (child *Context) go_(f func(cx *Context)) {
-	defer child.parent.RemoveCanceler(child)
+	defer child.Done()
 	f(child)
 }
 
@@ -267,14 +244,14 @@ func (c *Context) GoInt(f func(*Context, interface{}), i interface{}) (child *Co
 }
 
 func (child *Context) goInt(f func(*Context, interface{}), i interface{}) {
-	defer child.parent.RemoveCanceler(child)
+	defer child.Done()
 	f(child, i)
 }
 
 func (c *Context) WaitAll() {
 	c.m.Lock()
 	for c.cancelsn != 0 || len(c.cancelsm) > 0 {
-		c.child.Wait()
+		c.childCond.Wait()
 	}
 	c.m.Unlock()
 }
@@ -295,9 +272,12 @@ func (c *Context) GoIntAsync(f func(*Context, interface{}), i interface{}) (chil
 	return
 }
 
-func (child *Context) Done() {
-	child.parent.RemoveCanceler(child)
-	if child.owngen {
-		child.gen.Release()
+func (c *Context) Done() {
+	if c.parent != nil {
+		c.parent.RemoveCanceler(c)
+	}
+	if c.owngen {
+		c.owngen = false
+		c.gen.Release()
 	}
 }

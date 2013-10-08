@@ -13,7 +13,7 @@ type BF struct {
 	Timeout time.Duration
 }
 
-func (b BF) New(f func(*Context)) (serv *ParallelService) {
+func (b BF) New(f func(*Context, *Request) (RetCode, interface{})) (serv *ParallelService) {
 	if b.N == 0 {
 		b.N = 1
 	}
@@ -35,24 +35,13 @@ func (b BF) New(f func(*Context)) (serv *ParallelService) {
 type ParallelService struct {
 	SimplePoint
 	sync.Mutex
-	f    func(*Context)
+	f    func(*Context, *Request) (RetCode, interface{})
 	sema chan struct{}
-}
-
-type parMiddle struct {
-	Middleware
-	serv *ParallelService
-}
-
-func (p *parMiddle) Respond(res *Response) {
-	p.serv.sema <- struct{}{}
 }
 
 func (serv *ParallelService) Loop() {
 	var req *Request
 	var ok bool
-	var buf *[16]parMiddle
-	var bufn int
 Loop:
 	for {
 		select {
@@ -76,21 +65,9 @@ Loop:
 			}
 		}
 
-		if buf == nil {
-			buf = &[16]parMiddle{}
-		}
-
-		mid := &buf[bufn]
-		mid.serv = serv
-
-		if bufn++; bufn == len(buf) {
-			buf = nil
-			bufn = 0
-		}
-
 		select {
 		case <-serv.ExitChan():
-			req.Respond(RcShutdown, nil)
+			req.ShutDown()
 			break Loop
 		default:
 			select {
@@ -99,16 +76,14 @@ Loop:
 				select {
 				case <-serv.sema:
 				case <-serv.ExitChan():
-					req.Respond(RcShutdown, nil)
+					req.ShutDown()
 					break Loop
 				}
 			}
 		}
 
-		if req.ChainMiddleware(mid) {
-			if ctx := req.Context(); ctx != nil {
-				go serv.f(ctx)
-			}
+		if ctx := req.Context(); ctx != nil {
+			go serv.serv(ctx)
 		} else {
 			serv.sema <- struct{}{}
 		}
@@ -119,5 +94,17 @@ Loop:
 			break
 		}
 		req.Respond(RcShutdown, nil)
+	}
+}
+
+func (serv *ParallelService) inc(ctx *ReqContext) {
+	ctx.Done()
+	serv.sema <- struct{}{}
+}
+
+func (serv *ParallelService) serv(ctx *ReqContext) {
+	defer serv.inc(ctx)
+	if req := ctx.Request; req != nil {
+		req.Respond(serv.f(&ctx.Context, req))
 	}
 }

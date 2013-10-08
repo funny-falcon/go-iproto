@@ -17,8 +17,9 @@ const (
 )
 
 const (
-	RcShutdown      = RcFatal | (0xff00)
-	RcProtocolError = RcFatal | (0x0300)
+	RcShutdown      = RcFatal | 0xff00
+	RcProtocolError = RcFatal | 0x0300
+	RcInternalError = RcFatal | 0xfc00
 )
 const (
 	RcCanceled = 0xff00 | RcTemporary

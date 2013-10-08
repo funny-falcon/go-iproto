@@ -44,7 +44,7 @@ func opTestService(r *iproto.Request) {
 	num := le.Uint32(r.Body)
 	result := make([]byte, 4)
 	le.PutUint32(result, num)
-	r.Respond(iproto.RcOK, result)
+	r.RespondBytes(iproto.RcOK, result)
 }
 
 var in_count = 0
@@ -73,7 +73,7 @@ func (r *Res) IRead(o interface{}, read *iproto.Reader) {
 
 var SumTestService = iproto.BF{N: 512, Timeout: 100 * time.Millisecond}.New(sumTestService)
 
-func sumTestService(cx *iproto.Context) {
+func sumTestService(cx *iproto.Context, req *iproto.Request) (iproto.RetCode, interface{}) {
 	defer func() {
 		if m := recover(); m != nil {
 			log.Printf("PANICING %+v", m)
@@ -137,7 +137,7 @@ func sumTestService(cx *iproto.Context) {
 		}
 	}
 
-	cx.Respond(0, sum)
+	return 0, sum
 }
 
 var ProxyTestService iproto.EndPoint

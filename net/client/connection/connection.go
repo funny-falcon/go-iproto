@@ -191,7 +191,7 @@ func (conn *Connection) flushInFly() {
 	}
 	for _, req := range reqs {
 		if request := req.Request; request != nil {
-			request.Respond(code, nil)
+			request.RespondFail(code)
 		}
 	}
 }
@@ -216,7 +216,7 @@ func (conn *Connection) readLoop() {
 		}
 
 		if ireq := conn.inFly.remove(res.Id); ireq != nil {
-			ireq.Respond(res.Code, res.Body)
+			ireq.RespondBytes(res.Code, res.Body)
 		}
 		if conn.State&CsWriteClosed != 0 && conn.inFly.put >= conn.inFly.got {
 			conn.notifyLoop(readEmpty)

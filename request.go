@@ -59,6 +59,10 @@ func (r *Request) IOError() {
 	r.RespondFail(RcIOError)
 }
 
+func (r *Request) ShutDown() {
+	r.RespondFail(RcShutdown)
+}
+
 func (r *Request) State() uint32 {
 	return r.state
 }
@@ -147,7 +151,22 @@ func (r *Request) chainResponse(code RetCode, body []byte) {
 	r.timer.Stop()
 }
 
-func (r *Request) Respond(code RetCode, body []byte) {
+func (r *Request) Respond(code RetCode, val interface{}) {
+	var body []byte
+	switch o := val.(type) {
+	case []byte:
+		body = o
+	case Body:
+		body = o
+	default:
+		w := Writer{defSize: 64}
+		w.Write(val)
+		body = w.Written()
+	}
+	r.RespondBytes(code, body)
+}
+
+func (r *Request) RespondBytes(code RetCode, body []byte) {
 	r.Lock()
 	if r.state == RsInFly {
 		r.chainResponse(code, body)
@@ -173,11 +192,31 @@ func (r *Request) ChainMiddleware(res RequestMiddleware) (chained bool) {
 	return
 }
 
-func (r *Request) Context() (cx *Context) {
-	cx = new(Context)
-	mid := &cxAsMid{cx: cx}
-	cx.cxAsMid = mid
-	if !r.SetInFly(mid) {
+type ReqContext struct {
+	Middleware
+	Context
+}
+
+func (cm *ReqContext) Respond(res *Response) {
+	if res.Code == RcCanceled {
+		cm.Cancel()
+	} else if res.Code == RcTimeout {
+		cm.Expire()
+		cm.Request.ResetToPending()
+		cm.Request.SetInFly(nil)
+	}
+}
+
+func (cm *ReqContext) Done() {
+	if req := cm.Request; req != nil {
+		req.RespondFail(RcInternalError)
+	}
+	cm.Context.Done()
+}
+
+func (r *Request) Context() (cx *ReqContext) {
+	cx = &ReqContext{}
+	if !r.SetInFly(cx) {
 		return nil
 	}
 	return
