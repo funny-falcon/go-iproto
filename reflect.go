@@ -14,8 +14,7 @@ var _ = log.Print
 var _ = atomic.StoreUint32
 
 const (
-	wDefaultBuf = 256
-	wMaxBuf     = 4096
+	wDefaultBuf = 512
 )
 
 var le = binary.LittleEndian
@@ -61,8 +60,6 @@ func (w *Writer) ensure(n int) (l int) {
 		newCap := l + n
 		if w.defSize == 0 {
 			w.defSize = wDefaultBuf
-		} else if w.defSize < wMaxBuf {
-			w.defSize = ceilLog(w.defSize + 1)
 		}
 		if newCap < w.defSize {
 			newCap = w.defSize

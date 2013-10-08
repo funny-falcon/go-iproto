@@ -62,8 +62,7 @@ type Context struct {
 	cancelsm  map[Canceler]struct{}
 	reqId     uint32
 	cancelBuf []contextMiddleware
-	writer    Writer
-	gen       *RRGenerator
+	gen       *RGenerator
 }
 
 func (c *Context) RemoveCanceler(cn Canceler) {
@@ -149,7 +148,6 @@ func (c *Context) Respond(code RetCode, val interface{}) {
 		log.Panicf("Context has no binded request")
 	}
 	if req := c.Request; req != nil {
-		c.writer = Writer{}
 		w := Writer{defSize: 64}
 		w.Write(val)
 		req.Respond(code, w.Written())
@@ -157,28 +155,12 @@ func (c *Context) Respond(code RetCode, val interface{}) {
 	PutGenerator(c.gen)
 }
 
-func (c *Context) request(id uint32, msg RequestType, val IWriter) (r *Request) {
+func (c *Context) NewRequest(msg RequestType, body IWriter) (r *Request, res <-chan *Response) {
+	c.reqId++
 	if c.gen == nil {
 		c.gen = GetGenerator()
 	}
-
-	var body []byte
-	var ok bool
-	if body, ok = val.(Body); !ok {
-		val.IWrite(val, &c.writer)
-		body = c.writer.Written()
-	}
-
-	r, _ = c.gen.Pair()
-	r.Id = id
-	r.Msg = msg
-	r.Body = body
-	return
-}
-
-func (c *Context) NewRequest(msg RequestType, body IWriter) (r *Request, res <-chan *Response) {
-	c.reqId++
-	r = c.request(c.reqId, msg, body)
+	r = c.gen.Request(c.reqId, msg, body)
 	ch := make(Chan, 1)
 	res, r.Responder = ch, ch
 
@@ -199,7 +181,10 @@ func (c *Context) NewRequest(msg RequestType, body IWriter) (r *Request, res <-c
 }
 
 func (c *Context) NewMulti() (multi *MultiRequest) {
-	multi = &MultiRequest{cx: c}
+	if c.gen == nil {
+		c.gen = GetGenerator()
+	}
+	multi = &MultiRequest{cx: c, gen: c.gen}
 	rc := RetCode(atomic.LoadUint32((*uint32)(&c.RetCode)))
 	if rc == RcCanceled || rc == RcTimeout {
 		multi.Cancel()
@@ -308,48 +293,4 @@ func (c *Context) GoIntAsync(f func(*Context, interface{}), i interface{}) (chil
 func (child *Context) Done() {
 	child.parent.RemoveCanceler(child)
 	PutGenerator(child.gen)
-}
-
-const rrsize = 32
-
-type RRGenerator struct {
-	req *[rrsize]Request
-	res *[rrsize]Response
-	i   int32
-}
-
-func (gen *RRGenerator) Pair() (req *Request, res *Response) {
-	if gen.req == nil {
-		gen.req = &[rrsize]Request{}
-		gen.res = &[rrsize]Response{}
-	}
-	req = &gen.req[gen.i]
-	res = &gen.res[gen.i]
-	req.Response = res
-	if gen.i++; gen.i == rrsize {
-		gen.i = 0
-		gen.req = nil
-		gen.res = nil
-	}
-	return
-}
-
-var gencache = make(chan *RRGenerator, 1024)
-
-func GetGenerator() (gen *RRGenerator) {
-	select {
-	case gen = <-gencache:
-	default:
-		gen = &RRGenerator{}
-	}
-	return
-}
-
-func PutGenerator(gen *RRGenerator) {
-	if gen != nil {
-		select {
-		case gencache <- gen:
-		default:
-		}
-	}
 }

@@ -49,6 +49,7 @@ func (mr MultiResponse) Sort() MultiResponse {
 
 type MultiRequest struct {
 	cx        *Context
+	gen       *RGenerator
 	m         sync.Mutex
 	c, r      uint32
 	requests  []*Request
@@ -77,10 +78,10 @@ func (w *MultiRequest) SetTimeout(timeout time.Duration) {
 }
 
 func (w *MultiRequest) Request(msg RequestType, body IWriter) *Request {
-	if w.cx == nil {
-		w.cx = &Context{}
+	if w.gen == nil {
+		w.gen = GetGenerator()
 	}
-	req := w.cx.request(uint32(len(w.requests)), msg, body)
+	req := w.gen.Request(uint32(len(w.requests)), msg, body)
 	req.Responder = w
 	req.timerSet = w.timerSet
 	if len(w.requests) == cap(w.requests) {
@@ -152,7 +153,9 @@ func (w *MultiRequest) Results() MultiResponse {
 	}
 	res := w.responses
 	w.responses = nil
-	w.cx.RemoveCanceler(w)
+	if w.cx != nil {
+		w.cx.RemoveCanceler(w)
+	}
 	w.m.Unlock()
 	return res
 }
@@ -176,7 +179,9 @@ func (w *MultiRequest) Respond(r *Response) {
 	if v := atomic.AddUint32(&w.c, 1); v == w.r {
 		w.timer.Stop()
 		close(w.ch)
-		w.cx.RemoveCanceler(w)
+		if w.cx != nil {
+			w.cx.RemoveCanceler(w)
+		}
 	}
 }
 

@@ -194,3 +194,56 @@ const (
 	RsPrepared
 	RsPerformed
 )
+
+const rrsize = 32
+
+type RGenerator struct {
+	req *[rrsize]Request
+	res *[rrsize]Response
+	w   Writer
+	i   int32
+}
+
+func (gen *RGenerator) Request(id uint32, msg RequestType, val IWriter) (req *Request) {
+	var res *Response
+	if gen.req == nil {
+		gen.req = &[rrsize]Request{}
+		gen.res = &[rrsize]Response{}
+	}
+	req = &gen.req[gen.i]
+	res = &gen.res[gen.i]
+	req.Response = res
+	if gen.i++; gen.i == rrsize {
+		gen.i = 0
+		gen.req = nil
+		gen.res = nil
+	}
+	req.Id = id
+	req.Msg = msg
+	var ok bool
+	if req.Body, ok = val.(Body); !ok {
+		val.IWrite(val, &gen.w)
+		req.Body = gen.w.Written()
+	}
+	return
+}
+
+var gencache = make(chan *RGenerator, 1024)
+
+func GetGenerator() (gen *RGenerator) {
+	select {
+	case gen = <-gencache:
+	default:
+		gen = &RGenerator{}
+	}
+	return
+}
+
+func PutGenerator(gen *RGenerator) {
+	if gen != nil {
+		select {
+		case gencache <- gen:
+		default:
+		}
+	}
+}
