@@ -165,8 +165,6 @@ func (h *tHeap) push(x Expirator, e Epoch) bool {
 func (h *tHeap) remove(at uint32) {
 	t := &h.h[at]
 	t.x.Timer().i = 0
-	curfree := h.free
-	h.free = at
 	h.size--
 	var downi uint32
 	switch t.downl {
@@ -238,7 +236,8 @@ func (h *tHeap) remove(at uint32) {
 		h.h[t.up].down[t.upi] = downi
 	}
 Exit:
-	*t = tItem{up: curfree}
+	*t = tItem{up: h.free}
+	h.free = at
 }
 
 func (h *tHeap) putUnder(upi, downi uint32) {
