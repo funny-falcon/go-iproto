@@ -242,6 +242,7 @@ type RGenerator struct {
 	res *[rrsize]Response
 	w   Writer
 	g   generators
+	m   sync.Mutex
 	i   int32
 }
 
@@ -270,6 +271,7 @@ func (gen *RGenerator) Request(id uint32, msg RequestType, val IWriter) (req *Re
 }
 
 func (gen *RGenerator) Release() {
+	gen.m.Lock()
 	if gen != nil && gen.g != nil {
 		g := gen.g
 		gen.g = nil
@@ -278,6 +280,7 @@ func (gen *RGenerator) Release() {
 		default:
 		}
 	}
+	gen.m.Unlock()
 }
 
 func (g generators) Get() (gen *RGenerator) {
