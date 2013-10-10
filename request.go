@@ -1,6 +1,7 @@
 package iproto
 
 import (
+	"github.com/funny-falcon/go-iproto/marshal"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -20,7 +21,6 @@ const (
 
 type RequestData interface {
 	IMsg() RequestType
-	IWriter
 }
 
 type Request struct {
@@ -159,9 +159,7 @@ func (r *Request) Respond(code RetCode, val interface{}) {
 	case Body:
 		body = o
 	default:
-		w := Writer{defSize: 64}
-		w.Write(val)
-		body = w.Written()
+		body = marshal.Write(val)
 	}
 	r.RespondBytes(code, body)
 }
@@ -241,13 +239,13 @@ type generators chan *RGenerator
 type RGenerator struct {
 	req *[rrsize]Request
 	res *[rrsize]Response
-	w   Writer
+	w   marshal.Writer
 	g   generators
 	m   sync.Mutex
 	i   int32
 }
 
-func (gen *RGenerator) Request(id uint32, msg RequestType, val IWriter) (req *Request) {
+func (gen *RGenerator) Request(id uint32, msg RequestType, val interface{}) (req *Request) {
 	var res *Response
 	if gen.req == nil {
 		gen.req = &[rrsize]Request{}
@@ -265,7 +263,7 @@ func (gen *RGenerator) Request(id uint32, msg RequestType, val IWriter) (req *Re
 	req.Msg = msg
 	var ok bool
 	if req.Body, ok = val.(Body); !ok {
-		val.IWrite(val, &gen.w)
+		gen.w.Write(val)
 		req.Body = gen.w.Written()
 	}
 	return
@@ -297,4 +295,35 @@ var gencache = make(generators, 128)
 
 func GetGenerator() *RGenerator {
 	return gencache.Get()
+}
+
+type Body []byte
+
+func (b Body) IWrite(w *marshal.Writer) {
+	w.Bytes([]byte(b))
+}
+
+func (b Body) Reader() (r marshal.Reader) {
+	r.Body = b
+	return
+}
+
+func (b Body) Read2() (r marshal.Reader, err error) {
+	r.Body = b
+	err = r.Read(b)
+	return
+}
+
+func (b Body) ReadTail2() (r marshal.Reader, err error) {
+	r.Body = b
+	err = r.ReadTail(b)
+	return
+}
+
+func (b Body) Read(i interface{}) error {
+	return marshal.Read(b, i)
+}
+
+func (b Body) ReadTail(i interface{}) error {
+	return marshal.ReadTail(b, i)
 }

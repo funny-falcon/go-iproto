@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"github.com/funny-falcon/go-iproto"
+	"github.com/funny-falcon/go-iproto/marshal"
 	"github.com/funny-falcon/go-iproto/net/client"
 	"github.com/funny-falcon/go-iproto/net/server"
 	"log"
@@ -15,6 +16,7 @@ import (
 )
 
 var _ = log.Print
+var _ = marshal.Read
 
 const (
 	OP_SUMTEST, OP_TEST iproto.RequestType = 1, 2
@@ -58,20 +60,27 @@ func (r *OpTestReq) IMsg() iproto.RequestType {
 	return OP_TEST
 }
 
-func (r *OpTestReq) IWrite(o interface{}, w *iproto.Writer) {
+/*
+func (r *OpTestReq) IWrite(w *marshal.Writer) {
 	w.Uint32(r.J)
 }
+*/
 
 type Res struct {
 	J uint32
 }
 
-func (r *Res) IRead(o interface{}, read *iproto.Reader) {
+/*
+func (r *Res) IRead(read *marshal.Reader) {
 	r.J = read.Uint32()
 	return
 }
+*/
 
-var SumTestService = iproto.BF{N: 512, Timeout: 100 * time.Millisecond}.New(sumTestService)
+//var SumTestService = iproto.BF{N: 512, Timeout: 2000 * time.Millisecond}.New(sumTestService)
+var SumTestService = iproto.BF{N: 512, Timeout: 2000 * time.Millisecond}.New(sumTestService)
+
+//var SumTestService = iproto.BF{N: 512}.New(sumTestService)
 
 func sumTestService(cx *iproto.Context, req *iproto.Request) (iproto.RetCode, interface{}) {
 	defer func() {
@@ -90,37 +99,38 @@ func sumTestService(cx *iproto.Context, req *iproto.Request) (iproto.RetCode, in
 
 	for beg, j := 0, 0; j < cap(sums); j++ {
 		end := beg + (CHKNUM+j)/cap(sums)
-		cx.GoInt(func(cx *iproto.Context, ji interface{}) {
-			var s uint32
-			jj := ji.([2]int)
-			from, to := uint32(jj[0]), uint32(jj[1])
+		/*cx.GoInt(func(cx *iproto.Context, ji interface{}) {
+		jj := ji.([2]int)
+		beg, end := uint32(jj[0]), uint32(jj[1])
+		*/
 
-			mr := cx.NewMulti()
-			mr.TimeoutFrom(ProxyTestService)
+		mr := cx.NewMulti()
+		mr.TimeoutFrom(ProxyTestService)
 
-			var req OpTestReq
-			for i := from; i < to; i++ {
-				req.J = i * i
-				mr.Send(ProxyTestService, &req)
+		var req OpTestReq
+		for i := uint32(beg); i < uint32(end); i++ {
+			req.J = i * i
+			mr.Send(ProxyTestService, &req)
+		}
+
+		var s uint32
+		for _, res := range mr.Results() {
+			if res.Code != iproto.RcOK {
+				mr.Cancel()
+				result = RcError
+				break
 			}
-
-			for _, res := range mr.Results() {
-				if res.Code != iproto.RcOK {
-					mr.Cancel()
-					result = RcError
-					break
-				}
-				var i Res
-				if err := res.Body.ReadAll(&i); err != nil {
-					log.Println(err)
-					mr.Cancel()
-					result = RcError
-					break
-				}
-				s += i.J
+			var i Res
+			if err := res.Body.Read(&i); err != nil {
+				log.Println(err)
+				mr.Cancel()
+				result = RcError
+				break
 			}
-			sums <- s
-		}, [2]int{beg, end})
+			s += i.J
+		}
+		sums <- s
+		//}, [2]int{beg, end})
 		beg = end
 	}
 	cx.WaitAll()
@@ -155,7 +165,7 @@ var recurConf = client.ServerConfig{
 	RetCodeLen:   4,
 	Connections:  4,
 	PingInterval: time.Hour,
-	Timeout:      100 * time.Millisecond,
+	Timeout:      2000 * time.Millisecond,
 }
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")

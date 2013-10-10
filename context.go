@@ -135,7 +135,7 @@ func (c *Context) Expire() {
 	}
 }
 
-func (c *Context) NewRequest(msg RequestType, body IWriter) (r *Request, res <-chan *Response) {
+func (c *Context) NewRequest(msg RequestType, body interface{}) (r *Request, res <-chan *Response) {
 	c.reqId++
 	if c.gen == nil {
 		c.gen = GetGenerator()
@@ -177,16 +177,14 @@ func (c *Context) NewMulti() (multi *MultiRequest) {
 }
 
 func (c *Context) SendMsgBody(serv Service, msg RequestType, body interface{}) (req *Request, res <-chan *Response) {
-	wr := Wrap2IWriter(body)
-	req, res = c.NewRequest(msg, wr)
+	req, res = c.NewRequest(msg, body)
 	serv.Send(req)
 	return
 }
 
 func (c *Context) CallMsgBody(serv Service, msg RequestType, body interface{}) *Response {
 	var req *Request
-	wr := Wrap2IWriter(body)
-	req, res := c.NewRequest(msg, wr)
+	req, res := c.NewRequest(msg, body)
 	serv.Send(req)
 	return <-res
 }

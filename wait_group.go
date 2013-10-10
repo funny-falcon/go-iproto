@@ -78,7 +78,7 @@ func (w *MultiRequest) SetTimeout(timeout time.Duration) {
 	}
 }
 
-func (w *MultiRequest) Request(msg RequestType, body IWriter) *Request {
+func (w *MultiRequest) Request(msg RequestType, body interface{}) *Request {
 	if w.gen == nil {
 		w.gen = GetGenerator()
 		w.owngen = true
@@ -106,8 +106,7 @@ func (w *MultiRequest) Request(msg RequestType, body IWriter) *Request {
 }
 
 func (w *MultiRequest) SendMsgBody(serv Service, msg RequestType, body interface{}) *Request {
-	wr := Wrap2IWriter(body)
-	req := w.Request(msg, wr)
+	req := w.Request(msg, body)
 	serv.Send(req)
 	return req
 }

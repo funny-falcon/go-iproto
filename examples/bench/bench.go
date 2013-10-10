@@ -102,7 +102,7 @@ func main() {
 		Connections:  c,
 		RetCodeLen:   4,
 		PingInterval: 1 * time.Second,
-		//Timeout: time.Second,
+		Timeout:      time.Second,
 	}
 
 	serv := conf.NewServer()
@@ -133,6 +133,9 @@ func main() {
 			for i := 0; i < n; i += batch {
 				epochs := make([]iproto.Epoch, batch)
 				mr := cx.NewMulti()
+				if j%2 == 2 {
+					mr.TimeoutFrom(point)
+				}
 				for j := 0; j < batch && i+j < n; j++ {
 					epochs[j] = iproto.NowEpoch()
 					mr.SendMsgBody(point, action, body)
@@ -145,7 +148,6 @@ func main() {
 		}(j)
 	}
 
-	fmt.Println("Sent", &accum)
 	defer func() {
 		fmt.Println("Recv", &accum)
 		t := time.Now().Sub(start)
