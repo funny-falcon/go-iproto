@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"github.com/funny-falcon/go-iproto"
 	nt "github.com/funny-falcon/go-iproto/net"
 	"log"
 	"net"
@@ -26,6 +27,16 @@ type Server struct {
 func (cfg *Config) NewServer() (serv *Server) {
 	serv = &Server{
 		Config: *cfg,
+	}
+	if serv.RCMap != nil {
+		for k, v := range serv.RCMap {
+			if k&iproto.RcKindMask != iproto.RcInternal {
+				log.Panicf("Should map internal ret code %x to non internal code", k)
+			}
+			if v&iproto.RcKindMask == iproto.RcInternal {
+				log.Panicf("Should not map internal ret code %d to internal ret code %d", k, v)
+			}
+		}
 	}
 
 	serv.Running = make(chan bool)

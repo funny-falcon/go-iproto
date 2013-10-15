@@ -13,18 +13,19 @@ const (
 	RcOK        = RetCode(0)
 	RcTemporary = RetCode(1)
 	RcFatal     = RetCode(2)
-	RcKindMask  = RetCode(3)
+	RcInternal  = RetCode(3)
+	RcKindMask  = RetCode(7)
 )
 
 const (
-	RcShutdown      = RcFatal | 0xff00
+	RcShutdown      = RcInternal | 0xff00
 	RcProtocolError = RcFatal | 0x0300
 	RcInternalError = RcFatal | 0xfc00
 )
 const (
-	RcCanceled = 0xff00 | RcTemporary
-	RcIOError  = 0xfe00 | RcTemporary
-	RcTimeout  = 0xfd00 | RcTemporary
+	RcCanceled = 0xff00 | RcInternal
+	RcIOError  = 0xfe00 | RcInternal
+	RcTimeout  = 0xfd00 | RcInternal
 )
 
 type Response struct {

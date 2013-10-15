@@ -145,7 +145,7 @@ func (conn *Connection) readLoop() {
 	var req nt.Request
 	var err error
 	var r nt.HeaderReader
-	r.Init(conn.conn, conn.ReadTimeout, conn.RetCodeType)
+	r.Init(conn.conn, conn.ReadTimeout, conn.RCType)
 
 	defer conn.notifyLoop(readClosed)
 
@@ -222,7 +222,7 @@ func (conn *Connection) writeLoop() {
 	var err error
 	var w nt.HeaderWriter
 
-	w.Init(conn.conn, conn.WriteTimeout, conn.RetCodeType)
+	w.Init(conn.conn, conn.WriteTimeout, conn.RCType)
 
 	defer func() {
 		if err == nil {
@@ -264,6 +264,17 @@ Loop:
 				break Loop
 			}
 		}
+
+		if res.Code&iproto.RcKindMask == iproto.RcInternal {
+			if conn.RCMap != nil {
+				if repl := conn.RCMap[res.Code]; repl != 0 {
+					res.Code = repl
+					goto CodeEnd
+				}
+			}
+			res.Code = (res.Code &^ iproto.RcKindMask) | iproto.RcFatal
+		}
+	CodeEnd:
 
 		if err = w.WriteResponse(res); err != nil {
 			break Loop

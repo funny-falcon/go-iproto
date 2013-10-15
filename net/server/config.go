@@ -15,5 +15,6 @@ type Config struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 
-	RetCodeType net.RCType
+	RCType net.RCType
+	RCMap  map[iproto.RetCode]iproto.RetCode
 }
