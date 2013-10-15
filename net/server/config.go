@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/funny-falcon/go-iproto"
+	"github.com/funny-falcon/go-iproto/net"
 	"time"
 )
 
@@ -14,5 +15,5 @@ type Config struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 
-	RetCodeLen int
+	RetCodeType net.RCType
 }

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"github.com/funny-falcon/go-iproto/net"
 	"log"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ type ServerConfig struct {
 	WriteTimeout time.Duration
 	PingInterval time.Duration
 
-	RetCodeLen int
+	RetCodeType net.RCType
 
 	Timeout time.Duration
 }

@@ -54,7 +54,7 @@ type CConf struct {
 	WriteTimeout time.Duration
 	DialTimeout  time.Duration
 
-	RetCodeLen int
+	RetCodeType nt.RCType
 
 	ConnErr chan<- Error
 }
@@ -107,8 +107,8 @@ func (conn *Connection) Loop() {
 		conn.State = CsClosed
 	} else {
 		conn.conn = netconn.(nt.NetConn)
-		conn.reader.Init(conn.conn, conn.ReadTimeout)
-		conn.writer.Init(conn.conn, conn.WriteTimeout)
+		conn.reader.Init(conn.conn, conn.ReadTimeout, conn.RetCodeType)
+		conn.writer.Init(conn.conn, conn.WriteTimeout, conn.RetCodeType)
 		if err = conn.writer.Ping(); err == nil {
 			if err = conn.writer.Flush(); err == nil {
 				err = conn.reader.ReadPing()
@@ -207,7 +207,7 @@ func (conn *Connection) readLoop() {
 	defer conn.notifyLoop(readClosed)
 
 	for {
-		if res, conn.readErr = r.ReadResponse(conn.RetCodeLen); conn.readErr != nil {
+		if res, conn.readErr = r.ReadResponse(); conn.readErr != nil {
 			break
 		}
 

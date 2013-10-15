@@ -153,16 +153,14 @@ func sumTestService(cx *iproto.Context, req *iproto.Request) (iproto.RetCode, in
 var ProxyTestService iproto.EndPoint
 
 var serverConf = server.Config{
-	Network:    "tcp",
-	Address:    ":8766",
-	RetCodeLen: 4,
-	EndPoint:   &RootService,
+	Network:  "tcp",
+	Address:  ":8766",
+	EndPoint: &RootService,
 }
 
 var recurConf = client.ServerConfig{
 	Network:      "tcp",
 	Address:      ":8765",
-	RetCodeLen:   4,
 	Connections:  4,
 	PingInterval: time.Hour,
 	Timeout:      2000 * time.Millisecond,

@@ -70,7 +70,7 @@ func (cfg *ServerConfig) NewServer() (serv *Server) {
 				DialTimeout:  cfg.DialTimeout,
 				ReadTimeout:  cfg.ReadTimeout,
 				WriteTimeout: cfg.WriteTimeout,
-				RetCodeLen:   cfg.RetCodeLen,
+				RetCodeType:  cfg.RetCodeType,
 			},
 		},
 		connErr:     make(chan connection.Error, 4),

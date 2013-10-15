@@ -100,7 +100,6 @@ func main() {
 		Network:      "tcp",
 		Address:      fmt.Sprintf("%s:%d", h, p),
 		Connections:  c,
-		RetCodeLen:   4,
 		PingInterval: 1 * time.Second,
 		Timeout:      time.Second,
 	}

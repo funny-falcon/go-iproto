@@ -19,11 +19,13 @@ type Request struct {
 type Response iproto.Response
 
 type HeaderReader struct {
-	r SliceReader
+	r  SliceReader
+	rc RCType
 }
 
-func (h *HeaderReader) Init(conn io.Reader, timeout time.Duration) {
+func (h *HeaderReader) Init(conn io.Reader, timeout time.Duration, rc RCType) {
 	h.r = SliceReader{r: conn, size: 8 * 1024, timeout: timeout}
+	h.rc = rc
 }
 
 func (h *HeaderReader) ReadRequest() (req Request, err error) {
@@ -46,7 +48,7 @@ func (h *HeaderReader) ReadRequest() (req Request, err error) {
 	return
 }
 
-func (h *HeaderReader) ReadResponse(retCodeLen int) (res Response, err error) {
+func (h *HeaderReader) ReadResponse() (res Response, err error) {
 	var code iproto.RetCode
 	var head, body []byte
 
@@ -58,21 +60,26 @@ func (h *HeaderReader) ReadResponse(retCodeLen int) (res Response, err error) {
 	body_len := bin_le.Uint32(head[4:8])
 
 	if msg != iproto.Ping {
-		if body_len < uint32(retCodeLen) {
-			code = iproto.RcProtocolError
-		} else {
-			body_len -= uint32(retCodeLen)
-			switch retCodeLen {
-			case 0:
-				code = iproto.RcOK
-			case 1:
+		switch h.rc {
+		case RC0byte:
+			code = iproto.RcOK
+		case RC1byte:
+			if body_len < 1 {
+				code = iproto.RcProtocolError
+			} else {
 				var c byte
+				body_len -= 1
 				if c, err = h.r.ReadByte(); err != nil {
 					return
 				}
 				code = iproto.RetCode(c)
-			case 4:
+			}
+		case RC4byte:
+			if body_len < 4 {
+				code = iproto.RcProtocolError
+			} else {
 				var cd []byte
+				body_len -= 4
 				if cd, err = h.r.Read(4); err != nil {
 					return
 				}
@@ -111,11 +118,24 @@ func (h *HeaderReader) ReadPing() (err error) {
 }
 
 type HeaderWriter struct {
-	w BufWriter
+	w   BufWriter
+	rc  RCType
+	rcl int
 }
 
-func (h *HeaderWriter) Init(w io.Writer, timeout time.Duration) {
+func (h *HeaderWriter) Init(w io.Writer, timeout time.Duration, rc RCType) {
 	h.w = BufWriter{w: w, timeout: timeout}
+	h.rc = rc
+	switch h.rc {
+	case RC0byte:
+		h.rcl = 0
+	case RC1byte:
+		h.rcl = 1
+	case RC4byte:
+		h.rcl = 4
+	default:
+		panic("Unsupported return code len")
+	}
 }
 
 func (h *HeaderWriter) WriteRequest(req Request) (err error) {
@@ -134,28 +154,28 @@ func (h *HeaderWriter) Ping() (err error) {
 	return h.WriteRequest(ping)
 }
 
-func (h *HeaderWriter) WriteResponse(res Response, retCodeLen int) (err error) {
+func (h *HeaderWriter) WriteResponse(res Response) (err error) {
+	retCodeLen := h.rcl
 	if res.Msg == iproto.Ping {
 		retCodeLen = 0
 	}
-
 	body_len := uint32(len(res.Body) + retCodeLen)
 	if err = h.w.Write3Uint32(uint32(res.Msg), body_len, uint32(res.Id)); err != nil {
 		return
 	}
 
-	switch retCodeLen {
-	case 0:
-	case 1:
+	switch h.rc {
+	case RC0byte:
+	case RC1byte:
 		if err = h.w.WriteByte(byte(res.Code)); err != nil {
 			return
 		}
-	case 4:
+	case RC4byte:
 		if err = h.w.WriteUint32(uint32(res.Code)); err != nil {
 			return
 		}
 	default:
-		panic("Unsupported retCodeLen")
+		panic("Unsupported return code len")
 	}
 
 	err = h.w.Write(res.Body)
