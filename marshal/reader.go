@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"unsafe"
 )
 
 var _ = log.Print
@@ -196,15 +197,34 @@ func (r *Reader) Uint64varVal(v reflect.Value) {
 	v.SetUint(r.Uint64var())
 }
 
+func (r *Reader) Uint8slVal(v reflect.Value) {
+	l := v.Len()
+	if l > 0 {
+		p := (*[gg]uint8)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+		r.Uint8sl(p[:l])
+	}
+}
+
+func (r *Reader) Int8slVal(v reflect.Value) {
+	l := v.Len()
+	if l > 0 {
+		p := (*[gg]uint8)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+		r.Uint8sl(p[:l])
+	}
+}
+
 func (r *Reader) Uint8slValTail(v reflect.Value) {
 	if r.Err != nil {
 		return
 	}
 	if v.CanAddr() {
-		l := len(r.Body)
-		v.Set(reflect.MakeSlice(v.Type().Elem(), l, l))
+		//l := len(r.Body)
+		//v.Set(reflect.MakeSlice(v.Type().Elem(), l, l))
+		p := v.Addr().Interface().(*[]byte)
+		*p = r.Tail()
+	} else {
+		r.Uint8slVal(v)
 	}
-	r.Uint8slVal(v)
 }
 
 func (r *Reader) Uint16slValTail(v reflect.Value) {
@@ -352,6 +372,10 @@ func (r *Reader) Read(i interface{}) error {
 		r.Float32sl(o)
 	case []float64:
 		r.Float64sl(o)
+	case *string:
+		if count = r.Uint32(); r.Err == nil {
+			*o = string(r.Slice(int(count)))
+		}
 	case *[]int8:
 		if count = r.Uint32(); r.Err == nil {
 			*o = make([]int8, count)
@@ -573,6 +597,7 @@ type TReader struct {
 	Fixed      func(*Reader, reflect.Value)
 	Tail       func(*Reader, reflect.Value)
 	Auto       func(*Reader, reflect.Value)
+	AutoCount  func(*Reader, reflect.Value, int)
 	Sz         int
 	SzSet      func(reflect.Value, int) (bool, error)
 	Cnt        int
@@ -618,6 +643,10 @@ func (t *TReader) WithSize(r *Reader, v reflect.Value, szrd func(*Reader) int) {
 		szrd = (*Reader).IntUint32
 	}
 	sz := szrd(r)
+	if t.AutoCount != nil {
+		t.AutoCount(r, v, sz)
+		return
+	}
 	if ok, err := t.SetSize(v, sz); ok {
 		t.Fixed(r, v)
 		return
@@ -675,6 +704,10 @@ func (t *TReader) WithCount(r *Reader, v reflect.Value, cntrd func(*Reader) int)
 		cntrd = (*Reader).IntUint32
 	}
 	cnt := cntrd(r)
+	if t.AutoCount != nil {
+		t.AutoCount(r, v, cnt)
+		return
+	}
 	if err := t.SetCount(v, cnt); err != nil {
 		r.Err = err
 		return
@@ -683,6 +716,11 @@ func (t *TReader) WithCount(r *Reader, v reflect.Value, cntrd func(*Reader) int)
 }
 
 func (t *TReader) fillautotail() {
+	if t.Fixed == nil && t.AutoCount != nil {
+		t.Fixed = func(r *Reader, v reflect.Value) {
+			t.WithCount(r, v, (*Reader).IntUint32)
+		}
+	}
 	if t.Tail == nil {
 		t.Tail = t.Fixed
 	}
@@ -801,6 +839,13 @@ func (t *TReader) Fill() {
 	}
 
 	switch rt.Kind() {
+	case reflect.String:
+		t.AutoCount = func(r *Reader, v reflect.Value, sz int) {
+			v.SetString(string(r.Slice(sz)))
+		}
+		t.Tail = func(r *Reader, v reflect.Value) {
+			v.SetString(string(r.Tail()))
+		}
 	case reflect.Int8:
 		t.Sz = 1
 		t.Cnt = 1

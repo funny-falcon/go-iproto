@@ -168,6 +168,12 @@ func (w *Writer) Uint8sl(i []uint8) {
 	return
 }
 
+func (w *Writer) String(i string) {
+	l := w.ensure(len(i))
+	copy(w.buf[l:], i)
+	return
+}
+
 func (w *Writer) Int8sl(i []int8) {
 	l := w.ensure(len(i))
 	for j := 0; j < len(i); j++ {
@@ -218,6 +224,10 @@ func (w *Writer) Float64Val(v reflect.Value) {
 
 func (w *Writer) VarVal(v reflect.Value) {
 	w.Uint64var(uint64(v.Uint()))
+}
+
+func (w *Writer) StringVal(v reflect.Value) {
+	w.String(v.String())
 }
 
 func (w *Writer) Uint8slVal(v reflect.Value) {
@@ -279,6 +289,9 @@ func (w *Writer) Write(i interface{}) {
 		w.Float32(o)
 	case float64:
 		w.Float64(o)
+	case string:
+		w.IntUint32(len(o))
+		w.String(o)
 	case []uint8:
 		w.IntUint32(len(o))
 		w.Uint8sl(o)
@@ -636,6 +649,10 @@ func (t *TWriter) Fill() {
 	}
 
 	switch rt.Kind() {
+	case reflect.String:
+		t.Write = (*Writer).StringVal
+		t.SzGet = reflect.Value.Len
+		t.CntGet = reflect.Value.Len
 	case reflect.Int8:
 		t.Write = (*Writer).Int8Val
 		t.Sz = 1

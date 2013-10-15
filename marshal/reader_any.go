@@ -231,22 +231,6 @@ func (r *Reader) Float64sl(b []float64) {
 	return
 }
 
-func (r *Reader) Uint8slVal(v reflect.Value) {
-	l := v.Len()
-	if l > 0 {
-		p := (*[gg]uint8)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Uint8sl(p[:l])
-	}
-}
-
-func (r *Reader) Int8slVal(v reflect.Value) {
-	l := v.Len()
-	if l > 0 {
-		p := (*[gg]uint8)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Uint8sl(p[:l])
-	}
-}
-
 func (r *Reader) Uint16slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {

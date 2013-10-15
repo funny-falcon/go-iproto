@@ -105,6 +105,16 @@ type SSlice1 struct {
 	Ua7 []uint32 `iproto:"cnt(ber),ber"`
 }
 
+type SByte1 struct {
+	A byte
+	B []byte
+	C []int8 `iproto:"size(ber)"`
+}
+
+type SString1 struct {
+	A string
+}
+
 type SS1 struct {
 	I int32
 	J int16
@@ -129,6 +139,9 @@ type Should struct {
 }
 
 var shoulds = [...]Should{
+	{"abc", []byte{3, 0, 0, 0, 'a', 'b', 'c'}},
+	{[...]string{"abc", "cde"}, []byte{3, 0, 0, 0, 'a', 'b', 'c', 3, 0, 0, 0, 'c', 'd', 'e'}},
+	{[]string{"abc", "cde"}, []byte{2, 0, 0, 0, 3, 0, 0, 0, 'a', 'b', 'c', 3, 0, 0, 0, 'c', 'd', 'e'}},
 	{uint32(1234), []byte{210, 4, 0, 0}},
 	{uint32(12345678), []byte{78, 97, 188, 0}},
 	{[...]uint32{1234, 12345678}, []byte{210, 4, 0, 0, 78, 97, 188, 0}},
@@ -175,6 +188,8 @@ var shoulds = [...]Should{
 			1, 1, 0, 0, 0, 2, 0,
 			2, 0, 3, 0, 4, 0, 0, 0, 5, 0, 6, 0, 0, 0,
 		}},
+	{SString1{A: "asdf"}, []byte{4, 0, 0, 0, 'a', 's', 'd', 'f'}},
+	{SByte1{A: 1, B: []byte{1, 2, 3, 4}, C: []int8{2, 3}}, []byte{1, 4, 0, 0, 0, 1, 2, 3, 4, 2, 2, 3}},
 }
 
 func write(v interface{}) []byte {
@@ -219,7 +234,7 @@ func should_read(t *testing.T, m []byte, should interface{}) {
 	defer func() {
 		if err := recover(); err != nil {
 			t.Errorf("Fail %v\n:data: [% x]\nshould: %#v", err, m, should)
-			//panic(err)
+			panic(err)
 		}
 	}()
 	zero := zerovalue_pointer(should)
