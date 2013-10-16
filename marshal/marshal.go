@@ -161,3 +161,10 @@ var tfloat32 = reflect.TypeOf(float32(0))
 var tfloat64 = reflect.TypeOf(float64(0))
 
 const gg = 2*1024*1024*1024 - 1
+
+func Varsize(i int) (j int) {
+	for j = 0; i > 1<<7; j++ {
+		i >>= 7
+	}
+	return j + 1
+}
