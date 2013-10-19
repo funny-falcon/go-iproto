@@ -327,3 +327,34 @@ func (b Body) Read(i interface{}) error {
 func (b Body) ReadTail(i interface{}) error {
 	return marshal.ReadTail(b, i)
 }
+
+func SendMsgBody(serv Service, m RequestType, r interface{}) (*Request, Chan) {
+	var body []byte
+	var ok bool
+	if body, ok = r.(Body); !ok {
+		body = marshal.Write(r)
+	}
+	res := make(Chan, 1)
+	req := &Request{Msg: m, Body: body, Responder: res}
+	serv.Send(req)
+	return req, res
+}
+
+func Send(serv Service, r RequestData) (*Request, Chan) {
+	return SendMsgBody(serv, r.IMsg(), r)
+}
+
+func CallMsgBody(serv Service, m RequestType, r interface{}) *Response {
+	var body []byte
+	var ok bool
+	if body, ok = r.(Body); !ok {
+		body = marshal.Write(r)
+	}
+	res := make(Chan, 1)
+	serv.Send(&Request{Msg: m, Body: body, Responder: res})
+	return <-res
+}
+
+func Call(serv Service, r RequestData) *Response {
+	return CallMsgBody(serv, r.IMsg(), r)
+}
