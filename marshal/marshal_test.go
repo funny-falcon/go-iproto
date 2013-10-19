@@ -133,6 +133,10 @@ type SIFace1 struct {
 	B []interface{} `iproto:"cnt(i16)"`
 }
 
+type SIFace2 struct {
+	A interface{} `iproto:"size(ber)"`
+}
+
 type Should struct {
 	v interface{}
 	m []byte
@@ -202,7 +206,7 @@ func should_write(t *testing.T, v interface{}, should []byte) {
 	defer func() {
 		if err := recover(); err != nil {
 			t.Errorf("Fail %v\nvalue: %#v\nshould: [% x]", err, v, should)
-			//panic(err)
+			panic(err)
 		}
 	}()
 	encoded := write(v)
@@ -285,6 +289,13 @@ func TestEncodeSIFace(t *testing.T) {
 	}
 	n = []byte{1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 	should_write(t, s, n)
+
+	ss := SIFace2{int32(1)}
+	n = []byte{4, 1, 0, 0, 0}
+	should_write(t, ss, n)
+	ss = SIFace2{}
+	n = []byte{0}
+	should_write(t, ss, n)
 }
 
 func BenchmarkEncode(b *testing.B) {

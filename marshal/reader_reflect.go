@@ -387,6 +387,7 @@ type TReader struct {
 	Tail       func(*Reader, reflect.Value)
 	Auto       func(*Reader, reflect.Value)
 	AutoCount  func(*Reader, reflect.Value, int)
+	AutoSize   func(*Reader, reflect.Value, int)
 	Sz         int
 	SzSet      func(reflect.Value, int) (bool, error)
 	Cnt        int
@@ -433,8 +434,8 @@ func (t *TReader) WithSize(r *Reader, v reflect.Value, szrd func(*Reader) int) {
 		szrd = (*Reader).IntUint32
 	}
 	sz := szrd(r)
-	if t.AutoCount != nil {
-		t.AutoCount(r, v, sz)
+	if t.AutoSize != nil {
+		t.AutoSize(r, v, sz)
 		return
 	}
 	if ok, err := t.SetSize(v, sz); ok {
@@ -633,6 +634,7 @@ func (t *TReader) Fill() {
 		t.AutoCount = func(r *Reader, v reflect.Value, sz int) {
 			v.SetString(r.String(sz))
 		}
+		t.AutoSize = t.AutoCount
 		t.Tail = func(r *Reader, v reflect.Value) {
 			v.SetString(string(r.Tail()))
 		}
@@ -811,6 +813,18 @@ func (t *TReader) FillSlice() {
 	if !t.Elem.Implements {
 		switch t.Elem.Type.Kind() {
 		case reflect.Uint8:
+			if t.Elem.Type == tuint8 {
+				t.AutoCount = func(r *Reader, v reflect.Value, sz int) {
+					if v.CanSet() {
+						v.Set(reflect.ValueOf(r.Slice(sz)))
+					} else if sz == v.Len() {
+						r.Uint8slVal(v)
+					} else {
+						r.Err = fmt.Errorf("Could not write to not setable []uint8")
+					}
+				}
+				t.AutoSize = t.AutoCount
+			}
 			t.Fixed = (*Reader).Uint8slVal
 			t.Tail = (*Reader).Uint8slValTail
 			return

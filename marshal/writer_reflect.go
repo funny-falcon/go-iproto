@@ -509,14 +509,18 @@ func (t *TWriter) Fill() {
 			Type: reflect.TypeOf(new(interface{})).Elem(),
 			Elem: nil,
 			Write: func(w *Writer, v reflect.Value) {
-				el := v.Elem()
-				tt := _writer(el.Type())
-				tt.Write(w, el)
+				if !v.IsNil() {
+					el := v.Elem()
+					tt := WriterFor(el.Type())
+					tt.Write(w, el)
+				}
 			},
 			WriteAuto: func(w *Writer, v reflect.Value) {
-				el := v.Elem()
-				tt := _writer(el.Type())
-				tt.WriteAuto(w, el)
+				if !v.IsNil() {
+					el := v.Elem()
+					tt := WriterFor(el.Type())
+					tt.WriteAuto(w, el)
+				}
 			},
 			Sz:  -1,
 			Cnt: -1,
@@ -575,8 +579,11 @@ func (t *TWriter) FillArray() {
 		t.Write = func(w *Writer, v reflect.Value) {
 			l := v.Len()
 			for i := 0; i < l; i++ {
+				if v.Index(i).IsNil() {
+					continue
+				}
 				el := v.Index(i).Elem()
-				tt := _writer(el.Type())
+				tt := WriterFor(el.Type())
 				tt.Write(w, el)
 			}
 		}
@@ -633,8 +640,11 @@ func (t *TWriter) FillSlice() {
 		t.Write = func(w *Writer, v reflect.Value) {
 			l := v.Len()
 			for i := 0; i < l; i++ {
+				if v.Index(i).IsNil() {
+					continue
+				}
 				el := v.Index(i).Elem()
-				tt := _writer(el.Type())
+				tt := WriterFor(el.Type())
 				tt.Write(w, el)
 			}
 		}

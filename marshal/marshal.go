@@ -73,6 +73,8 @@ func Read(b []byte, i interface{}) (err error) {
 		readerCache.Body = b
 		readerCache.Err = nil
 		err = readerCache.Read(i)
+		readerCache.Err = nil
+		readerCache.Body = nil
 		atomic.StoreUint32(&readerLock, 0)
 	} else {
 		r := Reader{Body: b}
@@ -86,6 +88,8 @@ func ReadTail(b []byte, i interface{}) (err error) {
 		readerCache.Body = b
 		readerCache.Err = nil
 		err = readerCache.ReadTail(i)
+		readerCache.Err = nil
+		readerCache.Body = nil
 		atomic.StoreUint32(&readerLock, 0)
 	} else {
 		r := Reader{Body: b}
