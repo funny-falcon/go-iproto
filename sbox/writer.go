@@ -124,20 +124,19 @@ func (t *TWriter) Fill() {
 				elwr.Write(w, v.Elem())
 			}
 		}
-	case reflect.Array:
-		t.Write = func(w *marshal.Writer, v reflect.Value) {
-			l := v.Len()
-			w.IntUint32(l)
-			for i := 0; i < l; i++ {
-				t.Writer.Elem.WithSize(w, v.Index(i), (*marshal.Writer).Intvar)
+	case reflect.Array, reflect.Slice:
+		if rt.Elem().Kind() != reflect.Uint8 {
+			t.Write = func(w *marshal.Writer, v reflect.Value) {
+				l := v.Len()
+				w.IntUint32(l)
+				for i := 0; i < l; i++ {
+					t.Writer.Elem.WithSize(w, v.Index(i), (*marshal.Writer).Intvar)
+				}
 			}
-		}
-	case reflect.Slice:
-		t.Write = func(w *marshal.Writer, v reflect.Value) {
-			l := v.Len()
-			w.IntUint32(l)
-			for i := 0; i < l; i++ {
-				t.Writer.Elem.WithSize(w, v.Index(i), (*marshal.Writer).Intvar)
+		} else {
+			t.Write = func(w *marshal.Writer, v reflect.Value) {
+				w.IntUint32(1)
+				t.Writer.WithSize(w, v, (*marshal.Writer).Intvar)
 			}
 		}
 	case reflect.Struct:
@@ -145,8 +144,15 @@ func (t *TWriter) Fill() {
 	case reflect.Interface:
 		t.Write = func(w *marshal.Writer, v reflect.Value) {
 			el := v.Elem()
-			tt := _writer(el.Type())
+			tt := writer(el.Type())
 			tt.Write(w, el)
+		}
+	case reflect.Int8, reflect.Uint8, reflect.Uint16, reflect.Int16,
+		reflect.Uint32, reflect.Int32, reflect.Uint64, reflect.Int64,
+		reflect.Float32, reflect.Float64:
+		t.Write = func(w *marshal.Writer, v reflect.Value) {
+			w.Uint32(1)
+			t.Writer.WithSize(w, v, (*marshal.Writer).Intvar)
 		}
 	default:
 		log.Panicf("Don't know how to write type %+v as a tuple", rt)

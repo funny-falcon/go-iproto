@@ -3,92 +3,101 @@ package sbox
 import (
 	"bytes"
 	"github.com/funny-falcon/go-iproto/marshal"
-	"reflect"
+	//"reflect"
 	"testing"
 )
 
-type Should struct {
-	v interface{}
-	m []byte
+type SKey struct {
+	Id     int32
+	Domain string
 }
 
-type SStruct struct {
-	I int32
-	F byte
-	B []byte
-	S string
-}
-
-var shoulds = []Should{
-	{"asdf", []byte{1, 0, 0, 0, 4, 'a', 's', 'd', 'f'}},
-	{[]byte("asdf"), []byte{1, 0, 0, 0, 4, 'a', 's', 'd', 'f'}},
-	{int32(0x3def), []byte{1, 0, 0, 0, 4, 0xef, 0x3d, 0, 0}},
-	{[]int32{0x3def, 0xff00}, []byte{2, 0, 0, 0, 4, 0xef, 0x3d, 0, 0, 4, 0, 0xff, 0, 0}},
-	{&[]int32{0x3def, 0xff00}, []byte{2, 0, 0, 0, 4, 0xef, 0x3d, 0, 0, 4, 0, 0xff, 0, 0}},
-	{SStruct{0x3def, 0xfe, []byte{1, 2, 3}, "abcd"},
-		[]byte{4, 0, 0, 0, 4, 0xef, 0x3d, 0, 0, 1, 0xfe, 3, 1, 2, 3, 4, 'a', 'b', 'c', 'd'}},
-}
-
-var wr = &marshal.Writer{}
-
-func write(v interface{}) []byte {
-	WriteTuple(wr, v)
-	return wr.Written()
-}
-
-func shouldWrite(t *testing.T, v interface{}, m []byte) {
-	b := write(v)
-	if !bytes.Equal(b, m) {
-		t.Errorf("Doesn't match %+v\ngot [% x]\nneed [% x]", v, b, m)
+func TestSelect(t *testing.T) {
+	var s SelectReq
+	var b, n []byte
+	s = SelectReq{
+		Space: 3, Index: 2, Offset: 4, Limit: 100,
+		Keys: SKey{Id: 1, Domain: "mail.ru"},
 	}
-}
-
-func TestWriteTuple(t *testing.T) {
-	for _, should := range shoulds {
-		shouldWrite(t, should.v, should.m)
+	b = []byte{
+		3, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0, 0, 100, 0, 0, 0,
+		1, 0, 0, 0,
+		2, 0, 0, 0,
+		4, 1, 0, 0, 0, 7, 'm', 'a', 'i', 'l', '.', 'r', 'u',
 	}
-}
-
-func read(v interface{}, m []byte) error {
-	r := &marshal.Reader{Body: m}
-	return ReadTuple(r, v)
-}
-
-func zerovalue_pointer(v interface{}) interface{} {
-	t := reflect.TypeOf(v)
-	return reflect.New(t).Interface()
-}
-
-func dereference(p interface{}) interface{} {
-	v := reflect.ValueOf(p)
-	return reflect.Indirect(v).Interface()
-}
-
-func should_read(t *testing.T, m []byte, should interface{}) {
-	defer func() {
-		if err := recover(); err != nil {
-			t.Errorf("Fail %v\n:data: [% x]\nshould: %#v", err, m, should)
-			panic(err)
-		}
-	}()
-	zero := zerovalue_pointer(should)
-	if err := read(zero, m); err != nil {
-		t.Errorf("Error %v\ndata: [% x]\nshould: %#v",
-			err, m, should)
-	} else {
-		deref := dereference(zero)
-		if dd, ds := dereference(deref), dereference(should); reflect.DeepEqual(dd, ds) {
-			return
-		}
-		t.Errorf("Doesn't match [% x]\ngot: %#v\nshould: %#v",
-			m, zero, should)
+	n = marshal.Write(s)
+	if !bytes.Equal(b, n) {
+		t.Errorf("Select not match %+v\ngot:\t[% x]\nneed:\t[% x]", s, n, b)
 	}
-}
-
-func TestReadTuple(t *testing.T) {
-	for _, should := range shoulds {
-		//if reflect.TypeOf(should.v).Kind() != reflect.Ptr {
-		should_read(t, should.m, should.v)
-		//}
+	s = SelectReq{
+		Space: 3, Index: 2, Offset: 4, Limit: 100,
+		Keys: &SKey{Id: 1, Domain: "mail.ru"},
+	}
+	n = marshal.Write(s)
+	if !bytes.Equal(b, n) {
+		t.Errorf("Select not match %+v\ngot:\t[% x]\nneed:\t[% x]", s, n, b)
+	}
+	s = SelectReq{
+		Space: 3, Index: 2, Offset: 4, Limit: 100,
+		Keys: []SKey{
+			{Id: 1, Domain: "mail.ru"},
+			{Id: -1, Domain: "google.com"},
+		},
+	}
+	b = []byte{
+		3, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0, 0, 100, 0, 0, 0,
+		2, 0, 0, 0,
+		2, 0, 0, 0,
+		4, 1, 0, 0, 0, 7, 'm', 'a', 'i', 'l', '.', 'r', 'u',
+		2, 0, 0, 0,
+		4, 255, 255, 255, 255, 10, 'g', 'o', 'o', 'g', 'l', 'e', '.', 'c', 'o', 'm',
+	}
+	n = marshal.Write(s)
+	if !bytes.Equal(b, n) {
+		t.Errorf("Select not match %+v\ngot:\t[% x]\nneed:\t[% x]", s, n, b)
+	}
+	s = SelectReq{
+		Space: 3, Index: 2, Offset: 4, Limit: 100,
+		Keys: &[]SKey{
+			{Id: 1, Domain: "mail.ru"},
+			{Id: -1, Domain: "google.com"},
+		},
+	}
+	n = marshal.Write(s)
+	if !bytes.Equal(b, n) {
+		t.Errorf("Select not match %+v\ngot:\t[% x]\nneed:\t[% x]", s, n, b)
+	}
+	s = SelectReq{
+		Space: 3, Index: 2, Offset: 4, Limit: 100,
+		Keys: []*SKey{
+			&SKey{Id: 1, Domain: "mail.ru"},
+			&SKey{Id: -1, Domain: "google.com"},
+		},
+	}
+	n = marshal.Write(s)
+	if !bytes.Equal(b, n) {
+		t.Errorf("Select not match %+v\ngot:\t[% x]\nneed:\t[% x]", s, n, b)
+	}
+	s = SelectReq{
+		Space: 3, Index: 2, Offset: 4, Limit: 100,
+		Keys: []interface{}{
+			int32(1),
+			[...]int32{1},
+			[]int32{-1},
+			&SKey{Id: -1, Domain: "google.com"},
+		},
+	}
+	b = []byte{
+		3, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0, 0, 100, 0, 0, 0,
+		4, 0, 0, 0,
+		1, 0, 0, 0, 4, 1, 0, 0, 0,
+		1, 0, 0, 0, 4, 1, 0, 0, 0,
+		1, 0, 0, 0, 4, 255, 255, 255, 255,
+		2, 0, 0, 0,
+		4, 255, 255, 255, 255, 10, 'g', 'o', 'o', 'g', 'l', 'e', '.', 'c', 'o', 'm',
+	}
+	n = marshal.Write(s)
+	if !bytes.Equal(b, n) {
+		t.Errorf("Select not match %+v\ngot:\t[% x]\nneed:\t[% x]", s, n, b)
 	}
 }

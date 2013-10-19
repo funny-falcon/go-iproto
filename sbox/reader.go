@@ -13,7 +13,7 @@ var _ = log.Print
 
 func oneFieldTuple(r *marshal.Reader, sz int) bool {
 	var l, s int
-	if l = int(r.Uint32()); l == 1 {
+	if l = r.IntUint32(); l >= 1 {
 		if s = r.Intvar(); s == sz {
 			return true
 		} else {
@@ -25,7 +25,16 @@ func oneFieldTuple(r *marshal.Reader, sz int) bool {
 	return false
 }
 
-func ReadTuple(r *marshal.Reader, i interface{}) error {
+func ReadSizedTuple(r *marshal.Reader, i interface{}) error {
+	sz := r.IntUint32()
+	if r.Err == nil {
+		rd := marshal.Reader{Body: r.Slice(sz + 4)}
+		r.Err = ReadRawTuple(&rd, i)
+	}
+	return r.Err
+}
+
+func ReadRawTuple(r *marshal.Reader, i interface{}) error {
 	switch o := i.(type) {
 	case nil:
 		return nil
@@ -70,7 +79,7 @@ func ReadTuple(r *marshal.Reader, i interface{}) error {
 			*o = r.Float64()
 		}
 	case *string:
-		if l := r.Uint32(); l == 1 {
+		if l := r.Uint32(); l >= 1 {
 			sz := r.Intvar()
 			*o = r.String(sz)
 		} else {
@@ -81,14 +90,14 @@ func ReadTuple(r *marshal.Reader, i interface{}) error {
 			r.Uint8sl(o)
 		}
 	case *[]byte:
-		if l := r.Uint32(); l == 1 {
+		if l := r.Uint32(); l >= 1 {
 			sz := r.Intvar()
 			*o = r.Slice(sz)
 		} else {
 			r.Err = fmt.Errorf("Wrong field count: expect 1, got %d", l)
 		}
 	case [][]byte:
-		if l := int(r.Uint32()); l == len(o) {
+		if l := r.IntUint32(); l >= len(o) {
 			for i := 0; i < l; i++ {
 				sz := r.Intvar()
 				o[i] = r.Slice(sz)
@@ -97,14 +106,14 @@ func ReadTuple(r *marshal.Reader, i interface{}) error {
 			r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", len(o), l)
 		}
 	case *[][]byte:
-		l := int(r.Uint32())
+		l := r.IntUint32()
 		*o = make([][]byte, l)
 		for i := 0; i < l; i++ {
 			sz := r.Intvar()
 			(*o)[i] = r.Slice(sz)
 		}
 	case []interface{}:
-		if l := int(r.Uint32()); l == len(o) {
+		if l := r.IntUint32(); l >= len(o) {
 			for i := 0; i < l; i++ {
 				r.ReadWithSize(o[i], (*marshal.Reader).Intvar)
 			}
@@ -166,7 +175,7 @@ type TReader struct {
 }
 
 func (t *TReader) sliceFixed(r *marshal.Reader, v reflect.Value) {
-	if l := int(r.Uint32()); l == v.Len() {
+	if l := r.IntUint32(); l >= v.Len() {
 		for i := 0; i < l; i++ {
 			t.Reader.Elem.WithSize(r, v.Index(i), (*marshal.Reader).Intvar)
 		}
@@ -176,15 +185,39 @@ func (t *TReader) sliceFixed(r *marshal.Reader, v reflect.Value) {
 }
 
 func (t *TReader) sliceAuto(r *marshal.Reader, v reflect.Value) {
-	l := int(r.Uint32())
+	l := r.IntUint32()
 	if v.CanSet() {
 		v.Set(reflect.MakeSlice(v.Type(), l, l))
-	} else if l != v.Len() {
+	} else if l < v.Len() {
 		r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", v.Len(), l)
 		return
 	}
 	for i := 0; i < l; i++ {
 		t.Reader.Elem.WithSize(r, v.Index(i), (*marshal.Reader).Intvar)
+	}
+}
+
+func (t *TReader) fixedFixed(r *marshal.Reader, v reflect.Value) {
+	if oneFieldTuple(r, t.Reader.Sz) {
+		t.Reader.Fixed(r, v)
+	}
+}
+
+func (t *TReader) bytesFixed(r *marshal.Reader, v reflect.Value) {
+	if oneFieldTuple(r, v.Len()) {
+		t.Reader.Fixed(r, v)
+	}
+}
+
+func (t *TReader) bytesAuto(r *marshal.Reader, v reflect.Value) {
+	if !v.CanSet() {
+		t.bytesFixed(r, v)
+		return
+	}
+	if l := r.IntUint32(); l >= 1 {
+		t.Reader.WithSize(r, v, (*marshal.Reader).Intvar)
+	} else {
+		r.Err = fmt.Errorf("Wrong field count: expect 1, got %d", l)
 	}
 }
 
@@ -210,13 +243,28 @@ func (t *TReader) Fill() {
 			}
 		}
 	case reflect.Array:
-		t.Fixed = t.sliceFixed
-		t.Auto = t.sliceFixed
+		if rt.Elem().Kind() != reflect.Uint8 {
+			t.Fixed = t.sliceFixed
+			t.Auto = t.sliceFixed
+		} else {
+			t.Fixed = t.fixedFixed
+			t.Auto = t.fixedFixed
+		}
 	case reflect.Slice:
-		t.Fixed = t.sliceFixed
-		t.Auto = t.sliceAuto
+		if rt.Elem().Kind() != reflect.Uint8 {
+			t.Fixed = t.sliceFixed
+			t.Auto = t.sliceAuto
+		} else {
+			t.Fixed = t.bytesFixed
+			t.Auto = t.bytesAuto
+		}
 	case reflect.Struct:
 		t.FillStruct()
+	case reflect.Int8, reflect.Uint8, reflect.Uint16, reflect.Int16,
+		reflect.Uint32, reflect.Int32, reflect.Uint64, reflect.Int64,
+		reflect.Float32, reflect.Float64:
+		t.Fixed = t.fixedFixed
+		t.Auto = t.fixedFixed
 	default:
 		log.Panicf("Don't know how to read type %+v as a tuple", rt)
 	}
@@ -224,7 +272,7 @@ func (t *TReader) Fill() {
 
 func (sw *TReader) structFixed(r *marshal.Reader, v reflect.Value) {
 	flds := sw.Reader.Flds
-	l := int(r.Uint32())
+	l := r.IntUint32()
 	switch sw.Tail {
 	case NoTail:
 		if l != len(flds) {
@@ -254,10 +302,10 @@ func (sw *TReader) structAuto(r *marshal.Reader, v reflect.Value) {
 		return
 	}
 	flds := sw.Reader.Flds
-	l := int(r.Uint32())
+	l := r.IntUint32()
 	switch sw.Tail {
 	case NoTail:
-		if l != len(flds) {
+		if l < len(flds) {
 			r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", len(flds), l)
 			return
 		}
@@ -270,10 +318,6 @@ func (sw *TReader) structAuto(r *marshal.Reader, v reflect.Value) {
 		last := flds[len(flds)-1]
 		if sw.Tail == TailSplit {
 			llast := len(last.Flds)
-			if tail%llast != 0 {
-				r.Err = fmt.Errorf("Wrong field count: expect to be %d+n*%d, got %d", len(flds)-1, llast, l)
-				return
-			}
 			tail /= llast
 		}
 		last.TReader.SetCount(v.Field(last.I), tail)
