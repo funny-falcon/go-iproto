@@ -288,7 +288,7 @@ func (t *TWriter) Size(v reflect.Value) int {
 			return 0
 		}
 		el := v.Elem()
-		tt := _writer(el.Type())
+		tt := WriterFor(el.Type())
 		return tt.Size(el)
 	}
 	if t.Sz >= 0 {
@@ -336,7 +336,7 @@ func (t *TWriter) Count(v reflect.Value) int {
 			return 0
 		}
 		el := v.Elem()
-		tt := _writer(el.Type())
+		tt := WriterFor(el.Type())
 		return tt.Count(el)
 	}
 	if t.Cnt >= 0 {
