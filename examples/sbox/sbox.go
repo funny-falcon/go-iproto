@@ -57,7 +57,7 @@ func main() {
 		AvatarData: []byte("some where in a dark"),
 	}
 
-	box := client.ServerConfig{Address: "localhost:33010"}.NewServer()
+	box := client.ServerConfig{Address: "localhost:33010", Timeout: time.Second}.NewServer()
 	iproto.Run(box)
 
 	res := iproto.Call(box, sbox.StoreReq{Space: 0, Return: true, Tuple: tuple})
@@ -69,7 +69,7 @@ func main() {
 	res.Body.Read(&c)
 	fmt.Printf("Store %d [% x]\n", c, res.Body)
 
-	res = iproto.Call(box, sbox.SelectReq{Space: 0, Index: 0, Limit: -1, Keys: int32(12345)})
+	res = iproto.Call(box, sbox.SelectReq{Space: 0, Index: 0, Limit: -1, Keys: []int32{12345, 12345}})
 	if res.Code != sbox.RcOK {
 		fmt.Printf("Select error: %x %s\n", res.Code, res.Body)
 		return
@@ -79,8 +79,8 @@ func main() {
 		fmt.Printf("Select parse error: %v\n", err)
 		return
 	}
-	if !reflect.DeepEqual(tuple, tuples[0]) {
-		fmt.Printf("Not equal %+v %+v\n", tuple, tuples[0])
+	if !reflect.DeepEqual(tuple, tuples[0]) || !reflect.DeepEqual(tuple, tuples[1]) {
+		fmt.Printf("Not equal %+v %+v\n", tuple, tuples)
 	}
 
 	res = iproto.Call(box, sbox.SelectReq{Space: 0, Index: 1, Limit: -1, Keys: "hello@worl.d"})
