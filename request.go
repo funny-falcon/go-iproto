@@ -234,68 +234,35 @@ const (
 	RsPerformed
 )
 
-const rrsize = 32
-
-type generators chan *RGenerator
-type RGenerator struct {
-	req *[rrsize]Request
-	res *[rrsize]Response
-	w   marshal.Writer
-	g   generators
-	m   sync.Mutex
-	i   int32
-}
-
-func (gen *RGenerator) Request(id uint32, msg RequestType, val interface{}) (req *Request) {
-	var res *Response
-	if gen.req == nil {
-		gen.req = &[rrsize]Request{}
-		gen.res = &[rrsize]Response{}
-	}
-	req = &gen.req[gen.i]
-	res = &gen.res[gen.i]
-	req.Response = res
-	if gen.i++; gen.i == rrsize {
-		gen.i = 0
-		gen.req = nil
-		gen.res = nil
-	}
-	req.Id = id
-	req.Msg = msg
+func SendMsgBody(serv Service, m RequestType, r interface{}) (*Request, Chan) {
+	var body []byte
 	var ok bool
-	if req.Body, ok = val.(Body); !ok {
-		gen.w.Write(val)
-		req.Body = gen.w.Written()
+	if body, ok = r.(Body); !ok {
+		body = marshal.Write(r)
 	}
-	return
+	res := make(Chan, 1)
+	req := &Request{Msg: m, Body: body, Responder: res}
+	serv.Send(req)
+	return req, res
 }
 
-func (gen *RGenerator) Release() {
-	gen.m.Lock()
-	if gen != nil && gen.g != nil {
-		g := gen.g
-		gen.g = nil
-		select {
-		case g <- gen:
-		default:
-		}
-	}
-	gen.m.Unlock()
+func Send(serv Service, r RequestData) (*Request, Chan) {
+	return SendMsgBody(serv, r.IMsg(), r)
 }
 
-func (g generators) Get() (gen *RGenerator) {
-	select {
-	case gen = <-g:
-	default:
-		gen = &RGenerator{g: g}
+func CallMsgBody(serv Service, m RequestType, r interface{}) *Response {
+	var body []byte
+	var ok bool
+	if body, ok = r.(Body); !ok {
+		body = marshal.Write(r)
 	}
-	return
+	res := make(Chan, 1)
+	serv.Send(&Request{Msg: m, Body: body, Responder: res})
+	return <-res
 }
 
-var gencache = make(generators, 128)
-
-func GetGenerator() *RGenerator {
-	return gencache.Get()
+func Call(serv Service, r RequestData) *Response {
+	return CallMsgBody(serv, r.IMsg(), r)
 }
 
 type Body []byte
@@ -327,35 +294,4 @@ func (b Body) Read(i interface{}) error {
 
 func (b Body) ReadTail(i interface{}) error {
 	return marshal.ReadTail(b, i)
-}
-
-func SendMsgBody(serv Service, m RequestType, r interface{}) (*Request, Chan) {
-	var body []byte
-	var ok bool
-	if body, ok = r.(Body); !ok {
-		body = marshal.Write(r)
-	}
-	res := make(Chan, 1)
-	req := &Request{Msg: m, Body: body, Responder: res}
-	serv.Send(req)
-	return req, res
-}
-
-func Send(serv Service, r RequestData) (*Request, Chan) {
-	return SendMsgBody(serv, r.IMsg(), r)
-}
-
-func CallMsgBody(serv Service, m RequestType, r interface{}) *Response {
-	var body []byte
-	var ok bool
-	if body, ok = r.(Body); !ok {
-		body = marshal.Write(r)
-	}
-	res := make(Chan, 1)
-	serv.Send(&Request{Msg: m, Body: body, Responder: res})
-	return <-res
-}
-
-func Call(serv Service, r RequestData) *Response {
-	return CallMsgBody(serv, r.IMsg(), r)
 }
