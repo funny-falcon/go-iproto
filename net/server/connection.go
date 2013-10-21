@@ -71,16 +71,30 @@ func (conn *Connection) Stop() {
 }
 
 func (conn *Connection) Respond(r *iproto.Response) {
-	var ok bool
-	conn.Lock()
-	if _, ok = conn.inFly[r.Id]; ok {
-		delete(conn.inFly, r.Id)
-		select {
-		case conn.out <- nt.Response(*r):
-		default:
-			conn.buf = append(conn.buf, nt.Response(*r))
-			conn.bufRealCap = cap(conn.buf)
+	if r.Code&iproto.RcKindMask == iproto.RcInternal {
+		if conn.RCMap != nil {
+			if repl := conn.RCMap[r.Code]; repl != 0 {
+				r.Code = repl
+				goto CodeEnd
+			}
 		}
+		r.Code = (r.Code &^ iproto.RcKindMask) | iproto.RcFatal
+	}
+CodeEnd:
+
+	conn.Lock()
+	if _, ok := conn.inFly[r.Id]; ok {
+		delete(conn.inFly, r.Id)
+
+		if len(conn.buf) == 0 {
+			select {
+			case conn.out <- nt.Response(*r):
+				conn.Unlock()
+				return
+			}
+		}
+		conn.buf = append(conn.buf, nt.Response(*r))
+		conn.bufRealCap = cap(conn.buf)
 	}
 	conn.Unlock()
 }
@@ -209,7 +223,10 @@ Loop:
 			conn.bufRealCap = 16
 			conn.buf = make([]nt.Response, 0, 16)
 		} else if len(conn.buf) < conn.bufRealCap/16 {
-			conn.bufRealCap = len(conn.buf) * 2
+			conn.bufRealCap /= 8
+			if conn.bufRealCap < 16 {
+				conn.bufRealCap = 16
+			}
 			tmp := make([]nt.Response, len(conn.buf), conn.bufRealCap)
 			copy(tmp, conn.buf)
 			conn.buf = tmp
@@ -264,17 +281,6 @@ Loop:
 				break Loop
 			}
 		}
-
-		if res.Code&iproto.RcKindMask == iproto.RcInternal {
-			if conn.RCMap != nil {
-				if repl := conn.RCMap[res.Code]; repl != 0 {
-					res.Code = repl
-					goto CodeEnd
-				}
-			}
-			res.Code = (res.Code &^ iproto.RcKindMask) | iproto.RcFatal
-		}
-	CodeEnd:
 
 		if err = w.WriteResponse(res); err != nil {
 			break Loop
