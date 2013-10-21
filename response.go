@@ -18,14 +18,14 @@ const (
 )
 
 const (
-	RcShutdown      = 0xff03
-	RcProtocolError = 0x0302
-	RcInternalError = 0xfc02
+	RcShutdown      = RetCode(0xff03)
+	RcProtocolError = RetCode(0x0302)
+	RcInternalError = RetCode(0xfc02)
 )
 const (
-	RcCanceled = 0xff03
-	RcIOError  = 0xfe03
-	RcTimeout  = 0xfd03
+	RcCanceled = RetCode(0xff03)
+	RcIOError  = RetCode(0xfe03)
+	RcTimeout  = RetCode(0xfd03)
 )
 
 type Response struct {

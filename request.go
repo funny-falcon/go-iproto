@@ -211,6 +211,7 @@ func (cm *ReqContext) Done() {
 	if req := cm.Request; req != nil {
 		req.RespondFail(RcInternalError)
 	}
+	cm.Context.Done()
 }
 
 func (r *Request) Context() (cx *ReqContext) {

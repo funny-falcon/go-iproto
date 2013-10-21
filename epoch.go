@@ -55,3 +55,7 @@ func (e Epoch) String() string {
 func (e Epoch) Remains() time.Duration {
 	return time.Duration(e - NowEpoch())
 }
+
+func (e Epoch) Elapsed() time.Duration {
+	return time.Duration(NowEpoch() - e)
+}

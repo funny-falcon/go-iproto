@@ -38,6 +38,7 @@ type Canceler interface {
 type CxState uint32
 
 const (
+	CxOK       = CxState(0)
 	CxCanceled = CxState(1)
 	CxTimeout  = CxState(2)
 )
