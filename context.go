@@ -14,18 +14,18 @@ const (
 	cxReqBufMax = 128
 )
 
-type contextMiddleware struct {
-	Middleware
+type contextBookmark struct {
+	Bookmark
 	c *Context
 }
 
-func (cm *contextMiddleware) Respond(res *Response) {
+func (cm *contextBookmark) Respond(res *Response) {
 	if c := cm.c; c != nil {
 		c.RemoveCanceler(cm)
 	}
 }
 
-func (cm *contextMiddleware) Cancel() {
+func (cm *contextBookmark) Cancel() {
 	if r := cm.Request; r != nil {
 		r.Cancel()
 	}
@@ -55,7 +55,7 @@ type Context struct {
 	reqId     uint32
 	owngen    bool
 	gen       *RGenerator
-	cancelBuf []contextMiddleware
+	cancelBuf []contextBookmark
 }
 
 func (c *Context) RemoveCanceler(cn Canceler) {
@@ -151,12 +151,12 @@ func (c *Context) NewRequest(msg RequestType, body interface{}) (r *Request, res
 		r.Cancel()
 	} else {
 		if len(c.cancelBuf) == 0 {
-			c.cancelBuf = make([]contextMiddleware, cxReqBuf)
+			c.cancelBuf = make([]contextBookmark, cxReqBuf)
 		}
 		m := &c.cancelBuf[0]
 		m.c = c
 		c.cancelBuf = c.cancelBuf[1:]
-		r.ChainMiddleware(m)
+		r.ChainBookmark(m)
 		c.AddCanceler(m)
 	}
 	return

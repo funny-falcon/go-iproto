@@ -8,12 +8,12 @@ import (
 
 var _ = log.Print
 
-type bufMiddleware struct {
-	Middleware
+type bufBookmark struct {
+	Bookmark
 	state uint32
 }
 
-func (b *bufMiddleware) Respond(r *Response) {
+func (b *bufBookmark) Respond(r *Response) {
 	b.state = bsFree
 }
 
@@ -29,7 +29,7 @@ const (
 
 type bufferRow struct {
 	id  uint64
-	row [bufRow]bufMiddleware
+	row [bufRow]bufBookmark
 }
 
 type Buffer struct {
@@ -73,7 +73,7 @@ func (b *Buffer) push(r *Request) {
 	}
 
 	middle := &row.row[tail%bufRow]
-	if r.ChainMiddleware(middle) {
+	if r.ChainBookmark(middle) {
 		middle.state = bsSet
 	} else {
 		middle.state = bsFree

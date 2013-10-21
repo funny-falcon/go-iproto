@@ -8,7 +8,7 @@ import (
 )
 
 type Request struct {
-	iproto.Middleware
+	iproto.Bookmark
 	fakeId uint32
 }
 

@@ -59,26 +59,26 @@ func (ch Chan) Respond(r *Response) {
 	ch <- r
 }
 
-type RequestMiddleware interface {
+type RequestBookmark interface {
 	Respond(*Response)
-	setReq(req *Request, self RequestMiddleware)
-	unchain() RequestMiddleware
+	setReq(req *Request, self RequestBookmark)
+	unchain() RequestBookmark
 }
 
-type Middleware struct {
+type Bookmark struct {
 	Request *Request
-	prev    RequestMiddleware
+	prev    RequestBookmark
 }
 
-// Chain integrates Middleware into callback chain
-func (r *Middleware) setReq(req *Request, self RequestMiddleware) {
+// Chain integrates Bookmark into callback chain
+func (r *Bookmark) setReq(req *Request, self RequestBookmark) {
 	r.Request = req
 	r.prev = req.chain
 	req.chain = self
 }
 
-// Unchain removes Middleware from callback chain
-func (r *Middleware) unchain() (prev RequestMiddleware) {
+// Unchain removes Bookmark from callback chain
+func (r *Bookmark) unchain() (prev RequestBookmark) {
 	prev = r.prev
 	r.Request.chain = prev
 	r.prev = nil
@@ -86,5 +86,5 @@ func (r *Middleware) unchain() (prev RequestMiddleware) {
 	return
 }
 
-func (r *Middleware) Respond(resp *Response) {
+func (r *Bookmark) Respond(resp *Response) {
 }
