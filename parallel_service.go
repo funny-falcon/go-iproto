@@ -2,6 +2,7 @@ package iproto
 
 import (
 	"log"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -101,6 +102,12 @@ Loop:
 }
 
 func (serv *ParallelService) inc(ctx *ReqContext) {
+	if err := recover(); err != nil {
+		log.Print(err)
+		btrace := &[2048]byte{}
+		n := runtime.Stack(btrace[:], false)
+		log.Printf("%s", btrace[:n])
+	}
 	ctx.Done()
 	ctx.gen.Release()
 	serv.sema <- struct{}{}
