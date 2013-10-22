@@ -9,6 +9,11 @@ import (
 
 var _ = log.Printf
 
+const (
+	SelectAll = int32(-1)
+	SelectN   = int32(-2)
+)
+
 type SelectReq struct {
 	Space, Index uint32
 	Offset       uint32
@@ -21,12 +26,14 @@ func (s SelectReq) IWrite(w *marshal.Writer) {
 	w.Uint32(s.Space)
 	w.Uint32(s.Index)
 	w.Uint32(s.Offset)
+	cnt := CountKeys(s.Keys)
 	if s.Limit >= 0 {
 		w.Int32(s.Limit)
+	} else if s.Limit == SelectN {
+		w.Int32(int32(cnt))
 	} else {
 		w.Int32(1<<31 - 1)
 	}
-	cnt := CountKeys(s.Keys)
 	w.IntUint32(cnt)
 	WriteKeys(w, s.Keys)
 }
