@@ -944,6 +944,9 @@ func (t *TReader) FillStruct() {
 	size := 0
 	for i := 0; i < l; i++ {
 		fld := rt.Field(i)
+		if fld.PkgPath != "" {
+			continue
+		}
 		fr := FieldReader{I: i}
 		ipro := fld.Tag.Get("iproto")
 		var ber bool

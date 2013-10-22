@@ -693,6 +693,9 @@ func (t *TWriter) FillStruct() {
 	size := 0
 	for i := 0; i < l; i++ {
 		fld := rt.Field(i)
+		if fld.PkgPath != "" {
+			continue
+		}
 		ipro := fld.Tag.Get("iproto")
 		fw := FieldWriter{I: i, Tag: fld.Tag}
 		var ber bool
