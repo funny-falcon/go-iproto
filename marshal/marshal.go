@@ -74,13 +74,13 @@ func Read(b []byte, i interface{}) (err error) {
 	if t = readerCache; t != nil {
 		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
 			r = (*Reader)(t)
+			r.Body = b
+			r.Err = nil
 			goto Got
 		}
 	}
 	r = &Reader{Body: b}
 Got:
-	r.Body = b
-	r.Err = nil
 	err = r.Read(i)
 	r.Body = nil
 	atomic.StorePointer(&readerCache, unsafe.Pointer(r))
@@ -93,13 +93,13 @@ func ReadTail(b []byte, i interface{}) (err error) {
 	if t = readerCache; t != nil {
 		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
 			r = (*Reader)(t)
+			r.Body = b
+			r.Err = nil
 			goto Got
 		}
 	}
 	r = &Reader{Body: b}
 Got:
-	r.Body = b
-	r.Err = nil
 	err = r.ReadTail(i)
 	r.Body = nil
 	atomic.StorePointer(&readerCache, unsafe.Pointer(r))
