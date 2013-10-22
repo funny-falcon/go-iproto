@@ -34,7 +34,7 @@ Got:
 			err = r[0].Err
 		}
 	}
-	atomic.CompareAndSwapPointer(&readerCache, nil, unsafe.Pointer(r))
+	atomic.StorePointer(&readerCache, unsafe.Pointer(r))
 	return
 }
 
@@ -55,7 +55,7 @@ Got:
 	read = readInterface(r, reflect.ValueOf(v), total)
 
 	err = r[0].Err
-	atomic.CompareAndSwapPointer(&readerCache, nil, unsafe.Pointer(r))
+	atomic.StorePointer(&readerCache, unsafe.Pointer(r))
 	return
 }
 

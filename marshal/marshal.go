@@ -66,35 +66,43 @@ type IShortSetCounter interface {
 }
 
 var readerLock uint32 = 0
-var readerCache Reader
+var readerCache unsafe.Pointer = unsafe.Pointer(&Reader{})
 
 func Read(b []byte, i interface{}) (err error) {
-	if atomic.CompareAndSwapUint32(&readerLock, 0, 1) {
-		readerCache.Body = b
-		readerCache.Err = nil
-		err = readerCache.Read(i)
-		readerCache.Err = nil
-		readerCache.Body = nil
-		atomic.StoreUint32(&readerLock, 0)
-	} else {
-		r := Reader{Body: b}
-		err = r.Read(i)
+	var t unsafe.Pointer
+	var r *Reader
+	if t = readerCache; t != nil {
+		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
+			r = (*Reader)(t)
+			goto Got
+		}
 	}
+	r = &Reader{Body: b}
+Got:
+	r.Body = b
+	r.Err = nil
+	err = r.Read(i)
+	r.Body = nil
+	atomic.StorePointer(&readerCache, unsafe.Pointer(r))
 	return
 }
 
 func ReadTail(b []byte, i interface{}) (err error) {
-	if atomic.CompareAndSwapUint32(&readerLock, 0, 1) {
-		readerCache.Body = b
-		readerCache.Err = nil
-		err = readerCache.ReadTail(i)
-		readerCache.Err = nil
-		readerCache.Body = nil
-		atomic.StoreUint32(&readerLock, 0)
-	} else {
-		r := Reader{Body: b}
-		err = r.ReadTail(i)
+	var t unsafe.Pointer
+	var r *Reader
+	if t = readerCache; t != nil {
+		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
+			r = (*Reader)(t)
+			goto Got
+		}
 	}
+	r = &Reader{Body: b}
+Got:
+	r.Body = b
+	r.Err = nil
+	err = r.ReadTail(i)
+	r.Body = nil
+	atomic.StorePointer(&readerCache, unsafe.Pointer(r))
 	return
 }
 
