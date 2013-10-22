@@ -180,7 +180,13 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	ProxyTestService = recurConf.NewServer()
+	proxy1 := recurConf.NewServer()
+	proxy2 := recurConf.NewServer()
+	balancer := &iproto.BalancerPoint{}
+	balancer.Init()
+	balancer.AddChild(proxy1)
+	balancer.AddChild(proxy2)
+	ProxyTestService = balancer
 	iproto.Run(ProxyTestService)
 
 	self := serverConf.NewServer()
