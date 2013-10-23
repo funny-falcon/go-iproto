@@ -942,11 +942,15 @@ func (t *TReader) FillStruct() {
 	l := rt.NumField()
 	t.Cnt = 1
 	size := 0
+	nosize := false
 Fields:
 	for i := 0; i < l; i++ {
 		fld := rt.Field(i)
 		if fld.PkgPath != "" {
 			continue
+		}
+		if nosize {
+			log.Panicf("Only last field could be marked as size(no) or cnt(no) %+v", rt)
 		}
 		fr := FieldReader{I: i}
 		ipro := fld.Tag.Get("iproto")
@@ -993,10 +997,8 @@ Fields:
 					}
 					fr.SzRd = (*Reader).IntUint64
 				case "no":
-					if fr.I != rt.NumField()-1 {
-						log.Panicf("Only last field could be marked as size(no)")
-					}
 					size = -1
+					nosize = true
 					fr.NoSize = true
 				default:
 					log.Panicf("Could not understand directive size(%s) for field %s", t, fld.Name)
@@ -1036,10 +1038,8 @@ Fields:
 					}
 					fr.CntRd = (*Reader).IntUint64
 				case "no":
-					if fr.I != rt.NumField()-1 {
-						log.Panicf("Only last field could be marked as cnt(no)")
-					}
 					size = -1
+					nosize = true
 					fr.NoSize = true
 				default:
 					log.Panicf("Could not understand directive cnt(%s) for field %s", t, fld.Name)

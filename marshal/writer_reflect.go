@@ -691,11 +691,15 @@ func (t *TWriter) FillStruct() {
 	rt := t.Type
 	l := rt.NumField()
 	size := 0
+	nosize := false
 Fields:
 	for i := 0; i < l; i++ {
 		fld := rt.Field(i)
 		if fld.PkgPath != "" {
 			continue
+		}
+		if nosize {
+			log.Panicf("Only last field could be marked as size(no) or cnt(no) %+v", rt)
 		}
 		ipro := fld.Tag.Get("iproto")
 		fw := FieldWriter{I: i, Tag: fld.Tag}
@@ -742,10 +746,8 @@ Fields:
 					}
 					fw.SzWr = (*Writer).IntUint64
 				case "no":
-					if fw.I != rt.NumField()-1 {
-						log.Panicf("Only last field could be marked as size(no)")
-					}
 					size = -1
+					nosize = true
 					fw.NoSize = true
 				default:
 					log.Panicf("Could not understand directive size(%s) for field %s", t, fld.Name)
@@ -785,10 +787,8 @@ Fields:
 					}
 					fw.CntWr = (*Writer).IntUint64
 				case "no":
-					if fw.I != rt.NumField()-1 {
-						log.Panicf("Only last field could be marked as cnt(no)")
-					}
 					size = -1
+					nosize = true
 					fw.NoSize = true
 				default:
 					log.Panicf("Could not understand directive cnt(%s) for field %s", t, fld.Name)
