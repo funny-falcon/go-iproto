@@ -691,6 +691,7 @@ func (t *TWriter) FillStruct() {
 	rt := t.Type
 	l := rt.NumField()
 	size := 0
+Fields:
 	for i := 0; i < l; i++ {
 		fld := rt.Field(i)
 		if fld.PkgPath != "" {
@@ -702,7 +703,7 @@ func (t *TWriter) FillStruct() {
 
 		for _, m := range strings.Split(ipro, ",") {
 			if m == "skip" {
-				continue
+				continue Fields
 			} else if m == "ber" {
 				ber = true
 				size = -1
