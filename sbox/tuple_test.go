@@ -95,3 +95,22 @@ func TestReadTuple(t *testing.T) {
 		//}
 	}
 }
+
+func TestReadGeneral(t *testing.T) {
+	var i, j uint32
+	b := []byte{2, 0, 0, 0, 4, 0xff, 0xfe, 0, 0, 4, 0, 0, 0xff, 0xfe}
+	if err := read([]interface{}{&i, &j}, b); err != nil {
+		t.Error(err)
+	}
+	if i != 0xfeff || j != 0xfeff0000 {
+		t.Errorf("Expected 0xfeff 0xfeff0000, got 0x%x 0x%x", i, j)
+	}
+	var free [][]byte
+	if err := read(&free, b); err != nil {
+		t.Error(err)
+	}
+	if !bytes.Equal(free[0], []byte{0xff, 0xfe, 0, 0}) ||
+		!bytes.Equal(free[1], []byte{0, 0, 0xff, 0xfe}) {
+		t.Errorf("Expected 0xfeff 0xfeff0000, got 0x%x 0x%x", i, j)
+	}
+}

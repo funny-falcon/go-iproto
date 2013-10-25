@@ -35,104 +35,13 @@ func ReadSizedTuple(r *marshal.Reader, i interface{}) error {
 }
 
 func ReadRawTuple(r *marshal.Reader, i interface{}) error {
-	switch o := i.(type) {
-	case nil:
+	if i == nil {
 		return nil
-	case *uint8:
-		if oneFieldTuple(r, 1) {
-			*o = r.Uint8()
-		}
-	case *int8:
-		if oneFieldTuple(r, 1) {
-			*o = r.Int8()
-		}
-	case *uint16:
-		if oneFieldTuple(r, 2) {
-			*o = r.Uint16()
-		}
-	case *int16:
-		if oneFieldTuple(r, 2) {
-			*o = r.Int16()
-		}
-	case *uint32:
-		if oneFieldTuple(r, 4) {
-			*o = r.Uint32()
-		}
-	case *int32:
-		if oneFieldTuple(r, 4) {
-			*o = r.Int32()
-		}
-	case *uint64:
-		if oneFieldTuple(r, 8) {
-			*o = r.Uint64()
-		}
-	case *int64:
-		if oneFieldTuple(r, 8) {
-			*o = r.Int64()
-		}
-	case *float32:
-		if oneFieldTuple(r, 4) {
-			*o = r.Float32()
-		}
-	case *float64:
-		if oneFieldTuple(r, 8) {
-			*o = r.Float64()
-		}
-	case *string:
-		if l := r.Uint32(); l >= 1 {
-			sz := r.Intvar()
-			*o = r.String(sz)
-		} else {
-			r.Err = fmt.Errorf("Wrong field count: expect 1, got %d", l)
-		}
-	case []byte:
-		if oneFieldTuple(r, len(o)) {
-			r.Uint8sl(o)
-		}
-	case *[]byte:
-		if l := r.Uint32(); l >= 1 {
-			sz := r.Intvar()
-			*o = r.Slice(sz)
-		} else {
-			r.Err = fmt.Errorf("Wrong field count: expect 1, got %d", l)
-		}
-	case [][]byte:
-		if l := r.IntUint32(); l >= len(o) {
-			for i := 0; i < l; i++ {
-				sz := r.Intvar()
-				o[i] = r.Slice(sz)
-			}
-		} else {
-			r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", len(o), l)
-		}
-	case *[][]byte:
-		l := r.IntUint32()
-		*o = make([][]byte, l)
-		for i := 0; i < l; i++ {
-			sz := r.Intvar()
-			(*o)[i] = r.Slice(sz)
-		}
-	case []interface{}:
-		if l := r.IntUint32(); l >= len(o) {
-			for i := 0; i < l; i++ {
-				r.ReadWithSize(o[i], (*marshal.Reader).Intvar)
-			}
-		} else {
-			r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", len(o), l)
-		}
-	default:
-		val := reflect.ValueOf(i)
-		if val.Kind() == reflect.Ptr {
-			val := val.Elem()
-			rt := val.Type()
-			rd := reader(rt)
-			rd.Auto(r, val)
-		} else {
-			rt := val.Type()
-			rd := reader(rt)
-			rd.Fixed(r, val)
-		}
 	}
+	val := reflect.ValueOf(i)
+	rt := val.Type()
+	rd := reader(rt)
+	rd.Fixed(r, val)
 	return r.Err
 }
 

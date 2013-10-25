@@ -413,6 +413,22 @@ func (t *TReader) SetSize(v reflect.Value, sz int) (bool, error) {
 			}
 			return t.Elem.SetSize(v.Elem(), sz)
 		}
+	case reflect.Interface:
+		if sz == 0 {
+			if !v.IsNil() {
+				if v.CanSet() {
+					v.Set(reflect.ValueOf(nil))
+				} else {
+					el := v.Elem()
+					rd := ReaderFor(el.Type())
+					return rd.SetSize(el, sz)
+				}
+			}
+		} else {
+			el := v.Elem()
+			rd := ReaderFor(el.Type())
+			return rd.SetSize(el, sz)
+		}
 	}
 	if t.Sz >= 0 {
 		if sz != t.Sz {
@@ -473,6 +489,22 @@ func (t *TReader) SetCount(v reflect.Value, cnt int) error {
 				v.Set(reflect.New(t.Elem.Type))
 			}
 			return t.Elem.SetCount(v.Elem(), cnt)
+		}
+	case reflect.Interface:
+		if cnt == 0 {
+			if !v.IsNil() {
+				if v.CanSet() {
+					v.Set(reflect.ValueOf(nil))
+				} else {
+					el := v.Elem()
+					rd := ReaderFor(el.Type())
+					return rd.SetCount(el, cnt)
+				}
+			}
+		} else {
+			el := v.Elem()
+			rd := ReaderFor(el.Type())
+			return rd.SetCount(el, cnt)
 		}
 	}
 	if t.Cnt >= 0 {
@@ -711,6 +743,28 @@ func (t *TReader) Fill() {
 		t.FillSlice()
 	case reflect.Struct:
 		t.FillStruct()
+	case reflect.Interface:
+		t.Fixed = func(r *Reader, v reflect.Value) {
+			if !v.IsNil() {
+				el := v.Elem()
+				rd := ReaderFor(el.Type())
+				rd.Fixed(r, el)
+			}
+		}
+		t.Auto = func(r *Reader, v reflect.Value) {
+			if !v.IsNil() {
+				el := v.Elem()
+				rd := ReaderFor(el.Type())
+				rd.Auto(r, el)
+			}
+		}
+		t.Tail = func(r *Reader, v reflect.Value) {
+			if !v.IsNil() {
+				el := v.Elem()
+				rd := ReaderFor(el.Type())
+				rd.Tail(r, el)
+			}
+		}
 	}
 	return
 }
