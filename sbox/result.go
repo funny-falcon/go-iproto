@@ -26,8 +26,8 @@ Got:
 	total = r[0].IntUint32()
 	if total > 0 {
 		sz := r[0].IntUint32()
-		if r[0].Err != nil {
-			r[1].Body = r[0].Slice(sz)
+		if r[0].Err == nil {
+			r[1].Body = r[0].Slice(sz + 4)
 			err = ReadRawTuple(&r[1], v)
 			read = true
 		} else {
