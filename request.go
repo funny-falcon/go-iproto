@@ -153,12 +153,9 @@ func (r *Request) chainResponse(code RetCode, body []byte) {
 
 func (r *Request) Respond(code RetCode, val interface{}) {
 	var body []byte
-	switch o := val.(type) {
-	case []byte:
+	if o, ok := val.(Body); ok {
 		body = o
-	case Body:
-		body = o
-	default:
+	} else {
 		body = marshal.Write(val)
 	}
 	r.RespondBytes(code, body)
