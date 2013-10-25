@@ -203,6 +203,15 @@ func (t *TReader) fixedFixed(r *marshal.Reader, v reflect.Value) {
 	}
 }
 
+func (t *TReader) string(r *marshal.Reader, v reflect.Value) {
+	if l := r.Uint32(); l >= 1 {
+		sz := r.Intvar()
+		v.SetString(r.String(sz))
+	} else {
+		r.Err = fmt.Errorf("Wrong field count: expect 1, got %d", l)
+	}
+}
+
 func (t *TReader) bytesFixed(r *marshal.Reader, v reflect.Value) {
 	if oneFieldTuple(r, v.Len()) {
 		t.Reader.Fixed(r, v)
@@ -265,6 +274,9 @@ func (t *TReader) Fill() {
 		reflect.Float32, reflect.Float64:
 		t.Fixed = t.fixedFixed
 		t.Auto = t.fixedFixed
+	case reflect.String:
+		t.Fixed = t.string
+		t.Auto = t.string
 	default:
 		log.Panicf("Don't know how to read type %+v as a tuple", rt)
 	}
