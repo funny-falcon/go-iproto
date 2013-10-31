@@ -192,29 +192,29 @@ func (t *TReader) Fill() {
 }
 
 func (sw *TReader) structFixed(r *marshal.Reader, v reflect.Value) {
-	flds := sw.Reader.Flds
 	l := r.IntUint32()
+	/*flds := sw.Reader.Flds
 	switch sw.Tail {
 	case NoTail:
-		if l != len(flds) {
+		if l < len(flds) {
 			r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", len(flds), l)
 			return
 		}
 	case Tail:
 		need := len(flds) - 1 + v.Field(flds[len(flds)-1].I).Len()
-		if l != need {
+		if l < need {
 			r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", need, l)
 			return
 		}
 	case TailSplit:
 		last := flds[len(flds)-1]
 		need := len(flds) - 1 + v.Field(last.I).Len()*len(last.TReader.Flds)
-		if l != need {
+		if l <= need {
 			r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", need, l)
 			return
 		}
-	}
-	sw.structRead(r, v)
+	}*/
+	sw.structRead(r, l, v)
 }
 
 func (sw *TReader) structAuto(r *marshal.Reader, v reflect.Value) {
@@ -222,18 +222,19 @@ func (sw *TReader) structAuto(r *marshal.Reader, v reflect.Value) {
 		sw.structFixed(r, v)
 		return
 	}
-	flds := sw.Reader.Flds
 	l := r.IntUint32()
+	flds := sw.Reader.Flds
 	switch sw.Tail {
-	case NoTail:
-		if l < len(flds) {
-			r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", len(flds), l)
-			return
-		}
+	/*case NoTail:
+	if l < len(flds) {
+		r.Err = fmt.Errorf("Wrong field count: expect %d, got %d", len(flds), l)
+		return
+	}*/
 	case Tail, TailSplit:
 		if l < len(flds)-1 {
-			r.Err = fmt.Errorf("Wrong field count: expect at least %d, got %d", len(flds)-1, l)
-			return
+			break
+			/*r.Err = fmt.Errorf("Wrong field count: expect at least %d, got %d", len(flds)-1, l)
+			return*/
 		}
 		tail := l - len(flds) + 1
 		last := flds[len(flds)-1]
@@ -243,18 +244,21 @@ func (sw *TReader) structAuto(r *marshal.Reader, v reflect.Value) {
 		}
 		last.TReader.SetCount(v.Field(last.I), tail)
 	}
-	sw.structRead(r, v)
+	sw.structRead(r, l, v)
 }
 
-func (sw *TReader) structRead(r *marshal.Reader, v reflect.Value) {
+func (sw *TReader) structRead(r *marshal.Reader, k int, v reflect.Value) {
 	flds := sw.Reader.Flds
 	n := len(flds)
 	if sw.Tail != NoTail {
 		n -= 1
 	}
-	for i := 0; i < n; i++ {
+	for i := 0; i < n && i < k; i++ {
 		fs := &flds[i]
 		fs.WithSize(r, v.Field(fs.I), (*marshal.Reader).Intvar)
+	}
+	if k <= n {
+		return
 	}
 	switch sw.Tail {
 	case NoTail:
@@ -262,7 +266,7 @@ func (sw *TReader) structRead(r *marshal.Reader, v reflect.Value) {
 		fs := &flds[n]
 		fv := v.Field(n)
 		l := fv.Len()
-		for i := 0; i < l; i++ {
+		for i := 0; i < l && n+i < k; i++ {
 			val := fv.Index(i)
 			fs.WithSize(r, val, (*marshal.Reader).Intvar)
 		}
@@ -274,7 +278,7 @@ func (sw *TReader) structRead(r *marshal.Reader, v reflect.Value) {
 		fl := len(fss)
 		for i := 0; i < l; i++ {
 			str := fv.Index(i)
-			for j := 0; j < fl; j++ {
+			for j := 0; j < fl && n+i*fl+j < k; j++ {
 				fss[i].WithSize(r, str.Field(i), (*marshal.Reader).Intvar)
 			}
 		}
