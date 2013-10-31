@@ -185,12 +185,18 @@ func oneTuple(r *[2]marshal.Reader, v reflect.Value, rd *TReader) error {
 	sz := r[0].IntUint32()
 	r[1].Body = r[0].Slice(sz + 4)
 	if r[0].Err != nil {
+		log.Printf("oneTuple header read error: %s", r[0].Err)
 		return r[0].Err
 	}
+	body := r[1].Body
 	if rd == nil {
 		rd = reader(v.Type())
 	}
 	rd.Auto(&r[1], v)
-	r[0].Err = r[1].Err
-	return r[0].Err
+	if r[1].Err != nil {
+		log.Printf("oneTuple read error: %s %+v [% x]", r[1].Err, v.Interface(), body)
+	}
+	//r[0].Err = r[1].Err
+	//return r[0].Err
+	return nil
 }
