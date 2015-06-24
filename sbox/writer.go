@@ -139,6 +139,11 @@ func (t *TWriter) Fill() {
 				t.Writer.WithSize(w, v, (*marshal.Writer).Intvar)
 			}
 		}
+	case reflect.String:
+		t.Write = func(w *marshal.Writer, v reflect.Value) {
+			w.IntUint32(1)
+			t.Writer.WithSize(w, v, (*marshal.Writer).Intvar)
+		}
 	case reflect.Struct:
 		t.FillStruct()
 	case reflect.Interface:
