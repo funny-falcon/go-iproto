@@ -50,7 +50,7 @@ func (sl *SliceReader) Read(n int) (res []byte, err error) {
 }
 
 func (sl *SliceReader) ReadByte() (res byte, err error) {
-	if len(sl.buf) > 1 {
+	if len(sl.buf) > 0 {
 		res = sl.buf[0]
 		sl.buf = sl.buf[1:]
 		return
