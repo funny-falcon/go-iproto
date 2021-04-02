@@ -196,12 +196,6 @@ var shoulds = [...]Should{
 	{SByte1{A: 1, B: []byte{1, 2, 3, 4}, C: []int8{2, 3}}, []byte{1, 4, 0, 0, 0, 1, 2, 3, 4, 2, 2, 3}},
 }
 
-func write(v interface{}) []byte {
-	var w Writer
-	w.Write(v)
-	return w.Written()
-}
-
 func should_write(t *testing.T, v interface{}, should []byte) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -209,15 +203,10 @@ func should_write(t *testing.T, v interface{}, should []byte) {
 			panic(err)
 		}
 	}()
-	encoded := write(v)
+	encoded := Write(v)
 	if !bytes.Equal(encoded, should) {
 		t.Errorf("Doesn't match %#v\n% x\n% x", v, encoded, should)
 	}
-}
-
-func read(v interface{}, m []byte) error {
-	r := Reader{Body: m}
-	return r.Read(v)
 }
 
 func zerovalue_pointer(v interface{}) interface{} {
@@ -242,7 +231,7 @@ func should_read(t *testing.T, m []byte, should interface{}) {
 		}
 	}()
 	zero := zerovalue_pointer(should)
-	if err := read(zero, m); err != nil {
+	if err := Read(m, zero); err != nil {
 		t.Errorf("Error %v\ndata: [% x]\nshould: %#v",
 			err, m, should)
 	} else {
@@ -298,10 +287,12 @@ func TestEncodeSIFace(t *testing.T) {
 	should_write(t, ss, n)
 }
 
+var ballast = make([]byte, 0, 100000000)
+
 func BenchmarkEncode(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, should := range shoulds {
-			write(should.v)
+			Write(should.v)
 		}
 	}
 }
@@ -311,7 +302,7 @@ func BenchmarkDecode(b *testing.B) {
 		for _, should := range shoulds {
 			if reflect.TypeOf(should.v).Kind() != reflect.Ptr {
 				zero := zerovalue_pointer(should.v)
-				read(zero, should.m)
+				Read(should.m, zero)
 			}
 		}
 	}

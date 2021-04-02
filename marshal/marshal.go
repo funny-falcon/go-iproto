@@ -3,7 +3,7 @@ package marshal
 import (
 	"encoding/binary"
 	"reflect"
-	"sync/atomic"
+	"sync"
 	"unsafe"
 )
 
@@ -65,74 +65,53 @@ type IShortSetCounter interface {
 	ISetCount(int) error
 }
 
-var readerLock uint32 = 0
+//var readerLock uint32 = 0
 var readerCache unsafe.Pointer = unsafe.Pointer(&Reader{})
+var readerPool = sync.Pool{
+	New: func() interface{} {
+		return &Reader{}
+	},
+}
+
 
 func Read(b []byte, i interface{}) (err error) {
-	var t unsafe.Pointer
-	var r *Reader
-	if t = readerCache; t != nil {
-		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
-			r = (*Reader)(t)
-			r.Body = b
-			r.Err = nil
-			goto Got
-		}
-	}
-	r = &Reader{Body: b}
-Got:
+	r := readerPool.Get().(*Reader)
+	r.Body = b
 	err = r.Read(i)
-	r.Body = nil
-	atomic.StorePointer(&readerCache, unsafe.Pointer(r))
-	return
+	*r = Reader{}
+	readerPool.Put(r)
+	return err
 }
 
 func ReadTail(b []byte, i interface{}) (err error) {
-	var t unsafe.Pointer
-	var r *Reader
-	if t = readerCache; t != nil {
-		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
-			r = (*Reader)(t)
-			r.Body = b
-			r.Err = nil
-			goto Got
-		}
-	}
-	r = &Reader{Body: b}
-Got:
+	r := readerPool.Get().(*Reader)
+	r.Body = b
 	err = r.ReadTail(i)
-	r.Body = nil
-	atomic.StorePointer(&readerCache, unsafe.Pointer(r))
-	return
+	*r = Reader{}
+	readerPool.Put(r)
+	return err
 }
 
-var writerLock uint32 = 0
-var writerCache Writer
+var writerPool = sync.Pool{
+	New: func() interface{} {
+		return &Writer{DefSize: 512}
+	},
+}
 
 func Write(i interface{}) (res []byte) {
-	if atomic.CompareAndSwapUint32(&writerLock, 0, 1) {
-		writerCache.Write(i)
-		res = writerCache.Written()
-		atomic.StoreUint32(&writerLock, 0)
-	} else {
-		w := Writer{DefSize: 32}
-		w.Write(i)
-		res = w.Written()
-	}
-	return
+	w := writerPool.Get().(*Writer)
+	w.Write(i)
+	res = w.Written()
+	writerPool.Put(w)
+	return res
 }
 
 func WriteTail(i interface{}) (res []byte) {
-	if atomic.CompareAndSwapUint32(&readerLock, 0, 1) {
-		writerCache.WriteTail(i)
-		res = writerCache.Written()
-		atomic.StoreUint32(&writerLock, 0)
-	} else {
-		w := Writer{DefSize: 32}
-		w.WriteTail(i)
-		res = w.Written()
-	}
-	return
+	w := writerPool.Get().(*Writer)
+	w.WriteTail(i)
+	res = w.Written()
+	writerPool.Put(w)
+	return res
 }
 
 type efaceHeader struct {
