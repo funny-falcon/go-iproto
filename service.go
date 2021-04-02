@@ -134,7 +134,7 @@ func (s *SimplePoint) Send(r *Request) {
 		if r.Performed() {
 			return
 		}
-		log.Panicf("Request already sent somewhere %+v")
+		log.Panicf("Request already sent somewhere %+v", s)
 	}
 
 	r.SetTimeout(s.Timeout)
