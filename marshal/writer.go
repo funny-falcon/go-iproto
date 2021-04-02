@@ -225,7 +225,9 @@ func (w *Writer) Uint8slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]uint8)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]uint8)(unsafe.Pointer(sh))
 			w.Uint8sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {
@@ -239,7 +241,9 @@ func (w *Writer) Int8slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]uint8)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]uint8)(unsafe.Pointer(sh))
 			w.Uint8sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {

@@ -65,13 +65,15 @@ type IShortSetCounter interface {
 	ISetCount(int) error
 }
 
-var readerLock uint32 = 0
+//var readerLock uint32 = 0
 var readerCache unsafe.Pointer = unsafe.Pointer(&Reader{})
+
 
 func Read(b []byte, i interface{}) (err error) {
 	var t unsafe.Pointer
 	var r *Reader
-	if t = readerCache; t != nil {
+
+	if t = atomic.LoadPointer(&readerCache); t != nil {
 		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
 			r = (*Reader)(t)
 			r.Body = b
@@ -90,7 +92,7 @@ Got:
 func ReadTail(b []byte, i interface{}) (err error) {
 	var t unsafe.Pointer
 	var r *Reader
-	if t = readerCache; t != nil {
+	if t = atomic.LoadPointer(&readerCache); t != nil {
 		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
 			r = (*Reader)(t)
 			r.Body = b
@@ -123,7 +125,7 @@ func Write(i interface{}) (res []byte) {
 }
 
 func WriteTail(i interface{}) (res []byte) {
-	if atomic.CompareAndSwapUint32(&readerLock, 0, 1) {
+	if atomic.CompareAndSwapUint32(&writerLock, 0, 1) {
 		writerCache.WriteTail(i)
 		res = writerCache.Written()
 		atomic.StoreUint32(&writerLock, 0)

@@ -122,7 +122,9 @@ func (w *Writer) Uint16slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]uint16)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]uint16)(unsafe.Pointer(sh))
 			w.Uint16sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {
@@ -136,7 +138,9 @@ func (w *Writer) Uint32slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]uint32)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]uint32)(unsafe.Pointer(sh))
 			w.Uint32sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {
@@ -150,7 +154,9 @@ func (w *Writer) Uint64slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]uint64)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]uint64)(unsafe.Pointer(sh))
 			w.Uint64sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {
@@ -164,7 +170,9 @@ func (w *Writer) Int16slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]int16)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]int16)(unsafe.Pointer(sh))
 			w.Int16sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {
@@ -178,7 +186,9 @@ func (w *Writer) Int32slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]int32)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]int32)(unsafe.Pointer(sh))
 			w.Int32sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {
@@ -192,7 +202,9 @@ func (w *Writer) Int64slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]int64)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]int64)(unsafe.Pointer(sh))
 			w.Int64sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {
@@ -206,7 +218,9 @@ func (w *Writer) Float32slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]float32)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]float32)(unsafe.Pointer(sh))
 			w.Float32sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {
@@ -220,7 +234,9 @@ func (w *Writer) Float64slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
 		if v.Index(0).CanAddr() {
-			p := (*[gg]float64)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+                        _p := uintptr( (unsafe.Pointer(v.Index(0).Addr().Pointer())) )
+                        sh := &reflect.SliceHeader{Data: _p, Len:  l, Cap:  l, }
+                        p := *(*[]float64)(unsafe.Pointer(sh))
 			w.Float64sl(p[:l])
 		} else {
 			for i := 0; i < l; i++ {
