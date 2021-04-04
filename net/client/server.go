@@ -1,10 +1,11 @@
 package client
 
 import (
-	"github.com/funny-falcon/go-iproto"
-	"github.com/funny-falcon/go-iproto/net/client/connection"
 	"log"
 	"time"
+
+	"github.com/funny-falcon/go-iproto"
+	"github.com/funny-falcon/go-iproto/net/client/connection"
 )
 
 type SConf struct {

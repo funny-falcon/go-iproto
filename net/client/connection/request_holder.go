@@ -1,10 +1,11 @@
 package connection
 
 import (
-	"github.com/funny-falcon/go-iproto"
 	"log"
 	"sync"
 	"sync/atomic"
+
+	"github.com/funny-falcon/go-iproto"
 )
 
 type Request struct {

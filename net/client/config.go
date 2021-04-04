@@ -1,10 +1,11 @@
 package client
 
 import (
-	"github.com/funny-falcon/go-iproto/net"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/funny-falcon/go-iproto/net"
 )
 
 type ServerConfig struct {

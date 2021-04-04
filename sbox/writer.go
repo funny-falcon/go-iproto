@@ -1,11 +1,12 @@
 package sbox
 
 import (
-	"github.com/funny-falcon/go-iproto/marshal"
 	"log"
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/funny-falcon/go-iproto/marshal"
 )
 
 var _ = log.Print

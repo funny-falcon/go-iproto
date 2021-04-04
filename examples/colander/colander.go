@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/binary"
+	"log"
+	"time"
+
 	"github.com/funny-falcon/go-iproto"
 	"github.com/funny-falcon/go-iproto/marshal"
 	"github.com/funny-falcon/go-iproto/net/client"
 	"github.com/funny-falcon/go-iproto/net/server"
-	"log"
-	"time"
 
 	"flag"
 	"os"

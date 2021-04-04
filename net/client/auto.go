@@ -1,12 +1,13 @@
 package client
 
 import (
-	"github.com/funny-falcon/go-iproto"
 	"sync"
+
+	"github.com/funny-falcon/go-iproto"
 )
 
 type Auto struct {
-	Config *ServerConfig
+	Config  *ServerConfig
 	servers map[string]*Server
 	sync.Mutex
 }

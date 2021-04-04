@@ -3,14 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/funny-falcon/go-iproto"
-	"github.com/funny-falcon/go-iproto/net/client"
 	"log"
 	"math"
 	"os"
 	"runtime"
 	"runtime/pprof"
 	"time"
+
+	"github.com/funny-falcon/go-iproto"
+	"github.com/funny-falcon/go-iproto/net/client"
 )
 
 var _ = log.Print

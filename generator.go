@@ -1,8 +1,9 @@
 package iproto
 
 import (
-	"github.com/funny-falcon/go-iproto/marshal"
 	"sync"
+
+	"github.com/funny-falcon/go-iproto/marshal"
 )
 
 const rrsize = 32

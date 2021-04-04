@@ -1,10 +1,11 @@
 package server
 
 import (
-	"github.com/funny-falcon/go-iproto"
-	nt "github.com/funny-falcon/go-iproto/net"
 	"log"
 	"sync"
+
+	"github.com/funny-falcon/go-iproto"
+	nt "github.com/funny-falcon/go-iproto/net"
 )
 
 var _ = log.Print

@@ -1,9 +1,10 @@
 package server
 
 import (
+	"time"
+
 	"github.com/funny-falcon/go-iproto"
 	"github.com/funny-falcon/go-iproto/net"
-	"time"
 )
 
 type Config struct {

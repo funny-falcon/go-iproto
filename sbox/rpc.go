@@ -1,7 +1,9 @@
 package sbox
 
-import "github.com/funny-falcon/go-iproto"
-import "github.com/funny-falcon/go-iproto/marshal"
+import (
+	"github.com/funny-falcon/go-iproto"
+	"github.com/funny-falcon/go-iproto/marshal"
+)
 
 /**
  * @brief Структура, описывающая вызов процедуры
@@ -30,7 +32,7 @@ type RPCReq struct {
  * как локальную функцию
  */
 func stringvar(w *marshal.Writer, s string) {
-	w.Intvar(len(s));
+	w.Intvar(len(s))
 	w.String(s)
 }
 
@@ -46,18 +48,18 @@ func (s RPCReq) IWrite(w *marshal.Writer) {
 	//
 	// Передаём имя процедуры
 	//
-	stringvar(w, s.Name);
+	stringvar(w, s.Name)
 
 	//
 	// Передаём число аргументов процедуры
 	//
-	w.IntUint32(len(s.Args));
+	w.IntUint32(len(s.Args))
 
 	//
 	// Передаём аргументы процедуры
 	//
 	for _, v := range s.Args {
-		stringvar(w, v);
+		stringvar(w, v)
 	}
 }
 

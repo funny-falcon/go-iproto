@@ -2,11 +2,12 @@ package server
 
 import (
 	"fmt"
-	"github.com/funny-falcon/go-iproto"
-	nt "github.com/funny-falcon/go-iproto/net"
 	"log"
 	"net"
 	"sync"
+
+	"github.com/funny-falcon/go-iproto"
+	nt "github.com/funny-falcon/go-iproto/net"
 )
 
 type Server struct {

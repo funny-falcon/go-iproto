@@ -1,11 +1,12 @@
 package iproto
 
 import (
-	"github.com/funny-falcon/go-iproto/marshal"
 	"log"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/funny-falcon/go-iproto/marshal"
 )
 
 // RequestType is a iproto request tag which goes fiRst in a packet

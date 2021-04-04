@@ -1,11 +1,12 @@
 package sbox
 
 import (
-	"github.com/funny-falcon/go-iproto/marshal"
 	"log"
 	"reflect"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/funny-falcon/go-iproto/marshal"
 )
 
 var readerLock uint32 = 0

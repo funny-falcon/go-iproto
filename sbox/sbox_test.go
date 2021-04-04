@@ -2,7 +2,9 @@ package sbox
 
 import (
 	"bytes"
+
 	"github.com/funny-falcon/go-iproto/marshal"
+
 	//"reflect"
 	"testing"
 )

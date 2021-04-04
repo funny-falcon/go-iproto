@@ -3,9 +3,10 @@ package net
 import (
 	"encoding/binary"
 	"errors"
-	"github.com/funny-falcon/go-iproto"
 	"io"
 	"time"
+
+	"github.com/funny-falcon/go-iproto"
 )
 
 var bin_le = binary.LittleEndian

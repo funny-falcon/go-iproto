@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/funny-falcon/go-iproto"
-	"github.com/funny-falcon/go-iproto/net/client"
-	"github.com/funny-falcon/go-iproto/sbox"
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/funny-falcon/go-iproto"
+	"github.com/funny-falcon/go-iproto/net/client"
+	"github.com/funny-falcon/go-iproto/sbox"
 )
 
 type TStruct struct {
