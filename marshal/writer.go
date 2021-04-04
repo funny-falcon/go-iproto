@@ -18,8 +18,9 @@ type Writer struct {
 }
 
 func (w *Writer) Written() (res []byte) {
-	res = w.buf
-	w.buf = w.buf[len(w.buf):]
+	l := len(w.buf)
+	res = w.buf[:l:l]
+	w.buf = w.buf[l:]
 	return
 }
 
