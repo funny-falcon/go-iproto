@@ -78,7 +78,7 @@ func readInterface(r *[2]marshal.Reader, v reflect.Value, l int) int {
 	case reflect.Array, reflect.Slice:
 		return readFixedArray(r, v, l)
 	}
-	log.Panicf("Don't know how to read tuple into", v.Type())
+	log.Panicf("Don't know how to read tuple into %v", v.Type())
 	return 0
 }
 

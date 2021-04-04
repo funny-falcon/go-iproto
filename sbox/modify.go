@@ -109,7 +109,7 @@ var opmap = [...]byte{
 type Op struct {
 	Field uint32
 	Op    OpKind
-	Val   interface{} `iproto:size(ber)`
+	Val   interface{} `iproto:"size(ber)"`
 }
 
 func (o Op) IWrite(w *marshal.Writer) {
@@ -146,7 +146,7 @@ func (o Op) IWrite(w *marshal.Writer) {
 }
 
 type Slice struct {
-	Offset int32       `iproto:size(ber)`
-	Length int32       `iproto:size(ber)`
-	Val    interface{} `iproto:size(ber)`
+	Offset int32       `iproto:"size(ber)"`
+	Length int32       `iproto:"size(ber)"`
+	Val    interface{} `iproto:"size(ber)"`
 }
