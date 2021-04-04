@@ -225,10 +225,11 @@ func (w *Writer) StringVal(v reflect.Value) {
 func (w *Writer) Uint8slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Uint8 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Uint8 {
 			panic("Uint8slVal called on wrong slice")
 		}
-		if el0 := v.Index(0); el0.CanAddr() {
+		if el0.CanAddr() {
 			sh := sliceHeaderFromElem(el0, l)
 			p := *(*[]byte)(unsafe.Pointer(&sh))
 			w.Uint8sl(p)
@@ -243,10 +244,11 @@ func (w *Writer) Uint8slVal(v reflect.Value) {
 func (w *Writer) Int8slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Int8 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Int8 {
 			panic("Int8slVal called on wrong slice")
 		}
-		if el0 := v.Index(0); el0.CanAddr() {
+		if el0.CanAddr() {
 			sh := sliceHeaderFromElem(el0, l)
 			p := *(*[]byte)(unsafe.Pointer(&sh))
 			w.Uint8sl(p)
@@ -274,6 +276,6 @@ func sliceHeaderFromElem(el0 reflect.Value, l int) sliceHeader {
 }
 
 type sliceHeader struct {
-	p unsafe.Pointer
+	p    unsafe.Pointer
 	l, c int
 }

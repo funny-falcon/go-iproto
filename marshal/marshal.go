@@ -73,7 +73,6 @@ var readerPool = sync.Pool{
 	},
 }
 
-
 func Read(b []byte, i interface{}) (err error) {
 	r := readerPool.Get().(*Reader)
 	r.Body = b

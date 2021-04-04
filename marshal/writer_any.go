@@ -121,10 +121,11 @@ func (w *Writer) Float64sl(i []float64) {
 func (w *Writer) Uint16slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Uint16 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Uint16 {
 			panic("Uint16slVal called on wrong slice")
 		}
-		if el0 := v.Index(0); el0.CanAddr() {
+		if el0.CanAddr() {
 			sh := sliceHeaderFromElem(el0, l)
 			p := *(*[]uint16)(unsafe.Pointer(&sh))
 			w.Uint16sl(p)
@@ -139,10 +140,11 @@ func (w *Writer) Uint16slVal(v reflect.Value) {
 func (w *Writer) Uint32slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Uint32 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Uint32 {
 			panic("Uint32slVal called on wrong slice")
 		}
-		if el0 := v.Index(0); el0.CanAddr() {
+		if el0.CanAddr() {
 			sh := sliceHeaderFromElem(el0, l)
 			p := *(*[]uint32)(unsafe.Pointer(&sh))
 			w.Uint32sl(p)
@@ -157,10 +159,11 @@ func (w *Writer) Uint32slVal(v reflect.Value) {
 func (w *Writer) Uint64slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Uint64 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Uint64 {
 			panic("Uint64slVal called on wrong slice")
 		}
-		if el0 := v.Index(0); el0.CanAddr() {
+		if el0.CanAddr() {
 			sh := sliceHeaderFromElem(el0, l)
 			p := *(*[]uint64)(unsafe.Pointer(&sh))
 			w.Uint64sl(p)
@@ -175,10 +178,11 @@ func (w *Writer) Uint64slVal(v reflect.Value) {
 func (w *Writer) Int16slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Int16 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Int16 {
 			panic("Int16slVal called on wrong slice")
 		}
-		if el0 := v.Index(0); el0.CanAddr() {
+		if el0.CanAddr() {
 			sh := sliceHeaderFromElem(el0, l)
 			p := *(*[]int16)(unsafe.Pointer(&sh))
 			w.Int16sl(p)
@@ -193,7 +197,8 @@ func (w *Writer) Int16slVal(v reflect.Value) {
 func (w *Writer) Int32slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Int32 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Int32 {
 			panic("Int32slVal called on wrong slice")
 		}
 		if el0 := v.Index(0); el0.CanAddr() {
@@ -211,10 +216,11 @@ func (w *Writer) Int32slVal(v reflect.Value) {
 func (w *Writer) Int64slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Int64 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Int64 {
 			panic("Int64slVal called on wrong slice")
 		}
-		if el0 := v.Index(0); el0.CanAddr() {
+		if el0.CanAddr() {
 			sh := sliceHeaderFromElem(el0, l)
 			p := *(*[]int64)(unsafe.Pointer(&sh))
 			w.Int64sl(p)
@@ -229,10 +235,11 @@ func (w *Writer) Int64slVal(v reflect.Value) {
 func (w *Writer) Float32slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Float32 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Float32 {
 			panic("Float32slVal called on wrong slice")
 		}
-		if el0 := v.Index(0); el0.CanAddr() {
+		if el0.CanAddr() {
 			sh := sliceHeaderFromElem(el0, l)
 			p := *(*[]float32)(unsafe.Pointer(&sh))
 			w.Float32sl(p)
@@ -247,10 +254,11 @@ func (w *Writer) Float32slVal(v reflect.Value) {
 func (w *Writer) Float64slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		if v.Type().Elem().Kind() != reflect.Float64 {
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Float64 {
 			panic("Float64slVal called on wrong slice")
 		}
-		if el0 := v.Index(0); el0.CanAddr() {
+		if el0.CanAddr() {
 			sh := sliceHeaderFromElem(el0, l)
 			p := *(*[]float64)(unsafe.Pointer(&sh))
 			w.Float64sl(p)

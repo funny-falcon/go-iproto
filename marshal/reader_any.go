@@ -234,63 +234,103 @@ func (r *Reader) Float64sl(b []float64) {
 func (r *Reader) Uint16slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]uint16)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Uint16sl(p[:l])
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Uint16 {
+			panic("Uint16slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]uint16)(unsafe.Pointer(&sh))
+		r.Uint16sl(p)
 	}
 }
 
 func (r *Reader) Uint32slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]uint32)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Uint32sl(p[:l])
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Uint32 {
+			panic("Uint32slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]uint32)(unsafe.Pointer(&sh))
+		r.Uint32sl(p)
 	}
 }
 
 func (r *Reader) Uint64slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]uint64)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Uint64sl(p[:l])
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Uint64 {
+			panic("Uint64slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]uint64)(unsafe.Pointer(&sh))
+		r.Uint64sl(p)
 	}
 }
 
 func (r *Reader) Int16slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]int16)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Int16sl(p[:l])
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Int16 {
+			panic("Int16slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]int16)(unsafe.Pointer(&sh))
+		r.Int16sl(p)
 	}
 }
 
 func (r *Reader) Int32slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]int32)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Int32sl(p[:l])
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Int32 {
+			panic("Int32slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]int32)(unsafe.Pointer(&sh))
+		r.Int32sl(p)
 	}
 }
 
 func (r *Reader) Int64slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]int64)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Int64sl(p[:l])
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Int64 {
+			panic("Int64slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]int64)(unsafe.Pointer(&sh))
+		r.Int64sl(p)
 	}
 }
 
 func (r *Reader) Float32slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]float32)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Float32sl(p[:l])
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Float32 {
+			panic("Float32slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]float32)(unsafe.Pointer(&sh))
+		r.Float32sl(p)
 	}
 }
 
 func (r *Reader) Float64slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]float64)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Float64sl(p[:l])
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Float64 {
+			panic("Float64slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]float64)(unsafe.Pointer(&sh))
+		r.Float64sl(p)
 	}
 }

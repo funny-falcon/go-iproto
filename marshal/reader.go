@@ -211,7 +211,12 @@ func (r *Reader) Uint64varVal(v reflect.Value) {
 func (r *Reader) Uint8slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]uint8)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Uint8 {
+			panic("Uint8slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]byte)(unsafe.Pointer(&sh))
 		r.Uint8sl(p[:l])
 	}
 }
@@ -219,8 +224,13 @@ func (r *Reader) Uint8slVal(v reflect.Value) {
 func (r *Reader) Int8slVal(v reflect.Value) {
 	l := v.Len()
 	if l > 0 {
-		p := (*[gg]uint8)(unsafe.Pointer(v.Index(0).Addr().Pointer()))
-		r.Uint8sl(p[:l])
+		el0 := v.Index(0)
+		if el0.Kind() != reflect.Int8 {
+			panic("Int8slVal called on wrong slice")
+		}
+		sh := sliceHeaderFromElem(el0, l)
+		p := *(*[]byte)(unsafe.Pointer(&sh))
+		r.Uint8sl(p)
 	}
 }
 
