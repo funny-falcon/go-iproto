@@ -15,7 +15,7 @@ var readerCache unsafe.Pointer = unsafe.Pointer(&[2]marshal.Reader{})
 func ReadFirst(b []byte, v interface{}) (read bool, total int, err error) {
 	var t unsafe.Pointer
 	var r *[2]marshal.Reader
-	if t = readerCache; t != nil {
+	if t = atomic.LoadPointer(&readerCache); t != nil {
 		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
 			r = (*[2]marshal.Reader)(t)
 			*r = [2]marshal.Reader{{Body: b}, {}}
@@ -42,7 +42,7 @@ Got:
 func ReadMany(b []byte, v interface{}) (read, total int, err error) {
 	var t unsafe.Pointer
 	var r *[2]marshal.Reader
-	if t = readerCache; t != nil {
+	if t = atomic.LoadPointer(&readerCache); t != nil {
 		if atomic.CompareAndSwapPointer(&readerCache, t, nil) {
 			r = (*[2]marshal.Reader)(t)
 			*r = [2]marshal.Reader{{Body: b}, {}}

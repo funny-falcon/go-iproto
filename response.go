@@ -1,5 +1,7 @@
 package iproto
 
+import "sync"
+
 // RetCode is a iproto return code, which lays in first bytes of response
 type RetCode uint32
 
@@ -68,21 +70,26 @@ type RequestBookmark interface {
 type Bookmark struct {
 	Request *Request
 	prev    RequestBookmark
+	sync.Mutex
 }
 
 // Chain integrates Bookmark into callback chain
 func (r *Bookmark) setReq(req *Request, self RequestBookmark) {
+	r.Lock()
 	r.Request = req
 	r.prev = req.chain
 	req.chain = self
+	r.Unlock()
 }
 
 // Unchain removes Bookmark from callback chain
 func (r *Bookmark) unchain() (prev RequestBookmark) {
+	r.Lock()
 	prev = r.prev
 	r.Request.chain = prev
 	r.prev = nil
 	r.Request = nil
+	r.Unlock()
 	return
 }
 

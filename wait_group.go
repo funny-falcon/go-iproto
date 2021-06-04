@@ -96,10 +96,17 @@ func (w *MultiRequest) Request(msg RequestType, body interface{}) *Request {
 		}
 		w.m.Unlock()
 	} else {
+		w.m.Lock()
 		w.requests = append(w.requests, req)
+		w.m.Unlock()
 	}
+
+	w.m.Lock()
 	atomic.StoreUint32(&w.r, uint32(len(w.requests)))
-	if atomic.LoadUint32(&w.kind)&mrFailed != 0 {
+	kind := w.kind
+	w.m.Unlock()
+
+	if kind&mrFailed != 0 {
 		w.performFail(req)
 	}
 	return req

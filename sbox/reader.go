@@ -52,9 +52,9 @@ var rsL sync.Mutex
 
 func reader(rt reflect.Type) (rd *TReader) {
 	rtid := reflect.ValueOf(rt).Pointer()
+	rsL.Lock()
+	defer rsL.Unlock()
 	if rd = rs[rtid]; rd == nil {
-		rsL.Lock()
-		defer rsL.Unlock()
 		if rd = rs[rtid]; rd == nil {
 			rss = make(map[uintptr]*TReader, len(ws)+1)
 			for t, r := range rs {

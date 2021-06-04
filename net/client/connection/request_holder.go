@@ -91,8 +91,11 @@ func (h *RequestHolder) remove(fakeId uint32) (ireq *iproto.Request) {
 	}
 
 	req := &reqs.reqs[fakeId&rowMask]
+	req.Lock()
 	req.fakeId = 0
 	ireq = req.Request
+	req.Unlock()
+
 	h.put++
 	return
 }
