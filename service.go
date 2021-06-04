@@ -129,6 +129,8 @@ func (s *SimplePoint) Send(r *Request) {
 		log.Panicf("you should not call Send on child endpoint %+v", s)
 	}
 
+	r.Lock()
+	defer r.Unlock()
 	if !r.SetPending() {
 		/* this could happen if SetDeadline already respond with timeout */
 		if r.Performed() {

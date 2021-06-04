@@ -97,6 +97,10 @@ func (r *Request) SetInFly(mid RequestBookmark) (set bool) {
 	return
 }
 
+func (r *Request) IsInFly() (set bool) {
+	return atomic.LoadUint32(&r.state) == RsInFly
+}
+
 func (r *Request) Performed() bool {
 	st := atomic.LoadUint32(&r.state)
 	return st == RsPrepared || st == RsPerformed
@@ -122,7 +126,7 @@ func (r *Request) ResetToNew() bool {
 		r.state = RsNew
 		return true
 	}
-	log.Panicf("ResetToPending should be called only for performed requests")
+	log.Panicf("ResetToNew should be called only for performed requests")
 	return false
 }
 

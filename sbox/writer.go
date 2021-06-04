@@ -82,10 +82,10 @@ var wss = ws
 var wsL sync.Mutex
 
 func writer(rt reflect.Type) (wr *TWriter) {
+	wsL.Lock()
+	defer wsL.Unlock()
 	rtid := reflect.ValueOf(rt).Pointer()
 	if wr = ws[rtid]; wr == nil {
-		wsL.Lock()
-		defer wsL.Unlock()
 		if wr = ws[rtid]; wr == nil {
 			wss = make(map[uintptr]*TWriter, len(ws)+1)
 			for t, w := range ws {

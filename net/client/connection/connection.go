@@ -289,11 +289,18 @@ Loop:
 			if !request.SetInFly(req) {
 				continue
 			}
+			request.Lock()
+			if !request.IsInFly() {
+				request.Unlock()
+				continue
+			}
 			requestHeader = nt.Request{
 				Msg:  request.Msg,
 				Id:   req.fakeId,
 				Body: request.Body,
 			}
+			request.Unlock()
+
 			req = nil
 
 			err = w.WriteRequest(requestHeader)
